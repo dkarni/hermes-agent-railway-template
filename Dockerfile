@@ -16,6 +16,9 @@ RUN apt-get update && \
 
 RUN node --version && npm --version
 
+# Browser automation for Hermes browser tool (Browserbase + local headless)
+RUN npm install -g agent-browser && agent-browser --version
+
 RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent.git /tmp/hermes-agent && \
     cd /tmp/hermes-agent && \
     uv pip install --system --no-cache -e ".[all]" && \
@@ -29,6 +32,8 @@ RUN mkdir -p /data/.hermes
 COPY server.py /app/server.py
 COPY templates/ /app/templates/
 COPY start.sh /app/start.sh
+COPY bootstrap_marco.py /app/bootstrap_marco.py
+COPY bootstrap_files/ /app/bootstrap_files/
 RUN chmod +x /app/start.sh
 
 ENV HOME=/data

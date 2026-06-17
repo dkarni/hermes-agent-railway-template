@@ -6,4 +6,6 @@ mkdir -p /data/.hermes/skills
 mkdir -p /data/.hermes/workspace
 mkdir -p /data/.hermes/pairing
 
+python /app/bootstrap_marco.py
+
 exec python /app/server.py

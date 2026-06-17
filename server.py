@@ -10,6 +10,7 @@ from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 from starlette.applications import Starlette
 from starlette.authentication import (
     AuthCredentials,
@@ -20,7 +21,7 @@ from starlette.authentication import (
 from starlette.middleware import Middleware
 from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, PlainTextResponse
+from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 from starlette.templating import Jinja2Templates
 
@@ -39,6 +40,9 @@ HERMES_HOME = os.environ.get("HERMES_HOME", str(Path.home() / ".hermes"))
 ENV_FILE_PATH = Path(HERMES_HOME) / ".env"
 PAIRING_DIR = Path(HERMES_HOME) / "pairing"
 CODE_TTL_SECONDS = 3600
+MARCO_PROFILE_HOME = Path(HERMES_HOME) / "profiles" / "marco"
+MARCO_ENV_PATHS = (MARCO_PROFILE_HOME / ".env", MARCO_PROFILE_HOME / "hermes.env")
+MARCO_17TRACK_BRIDGE_URL = os.environ.get("MARCO_17TRACK_BRIDGE_URL", "http://127.0.0.1:8654").rstrip("/")
 
 # Registry of known Hermes env vars exposed in the UI.
 # Each entry: (key, label, category, is_password)
@@ -295,6 +299,149 @@ gateway = GatewayManager()
 config_lock = asyncio.Lock()
 
 
+def read_env_files(paths: tuple[Path, ...]) -> dict[str, str]:
+    env_vars: dict[str, str] = {}
+    for path in paths:
+        env_vars.update(read_env_file(path))
+    return env_vars
+
+
+class ManagedProcess:
+    def __init__(
+        self,
+        name: str,
+        command: list[str],
+        env_overrides: dict[str, str] | None = None,
+        env_paths: tuple[Path, ...] = (),
+        cwd: str | None = None,
+    ):
+        self.name = name
+        self.command = command
+        self.env_overrides = env_overrides or {}
+        self.env_paths = env_paths
+        self.cwd = cwd
+        self.process: asyncio.subprocess.Process | None = None
+        self.state = "stopped"
+        self.logs: deque[str] = deque(maxlen=200)
+        self._read_task: asyncio.Task | None = None
+        self._watch_task: asyncio.Task | None = None
+        self._stopping = False
+
+    async def start(self):
+        if self.process and self.process.returncode is None:
+            return
+        self.state = "starting"
+        self._stopping = False
+        try:
+            env = os.environ.copy()
+            env.update(read_env_files(self.env_paths))
+            env.update(self.env_overrides)
+            self.process = await asyncio.create_subprocess_exec(
+                *self.command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                env=env,
+                cwd=self.cwd,
+            )
+            self.state = "running"
+            self.logs.append(f"{self.name} started (pid {self.process.pid})")
+            self._read_task = asyncio.create_task(self._read_output())
+            self._watch_task = asyncio.create_task(self._watch_exit())
+        except Exception as e:
+            self.state = "error"
+            self.logs.append(f"Failed to start {self.name}: {e}")
+
+    async def stop(self):
+        self._stopping = True
+        if not self.process or self.process.returncode is not None:
+            self.state = "stopped"
+            return
+        self.state = "stopping"
+        self.process.terminate()
+        try:
+            await asyncio.wait_for(self.process.wait(), timeout=10)
+        except asyncio.TimeoutError:
+            self.process.kill()
+            await self.process.wait()
+        self.state = "stopped"
+
+    async def _read_output(self):
+        try:
+            while self.process and self.process.stdout:
+                line = await self.process.stdout.readline()
+                if not line:
+                    break
+                decoded = line.decode("utf-8", errors="replace").rstrip()
+                self.logs.append(ANSI_ESCAPE.sub("", decoded))
+        except asyncio.CancelledError:
+            return
+
+    async def _watch_exit(self):
+        if not self.process:
+            return
+        code = await self.process.wait()
+        if self._stopping:
+            self.state = "stopped"
+            return
+        self.state = "error"
+        self.logs.append(f"{self.name} exited with code {code}; restarting in 5s")
+        await asyncio.sleep(5)
+        await self.start()
+
+    def get_status(self) -> dict:
+        return {
+            "state": self.state,
+            "pid": self.process.pid if self.process and self.process.returncode is None else None,
+            "logs": list(self.logs)[-20:],
+        }
+
+
+marco_gateway = ManagedProcess(
+    "marco gateway",
+    ["hermes", "-p", "marco", "gateway", "run", "--replace"],
+    env_paths=MARCO_ENV_PATHS,
+)
+track_bridge = ManagedProcess(
+    "17track bridge",
+    ["python", str(MARCO_PROFILE_HOME / "mcp" / "17track_webhook_bridge.py")],
+    env_overrides={
+        "MARCO_17TRACK_FORWARD_URL": os.environ.get(
+            "MARCO_17TRACK_FORWARD_URL",
+            "http://127.0.0.1:8644/webhooks/17track",
+        ),
+        "MARCO_17TRACK_BRIDGE_HOST": "127.0.0.1",
+        "MARCO_17TRACK_BRIDGE_PORT": os.environ.get("MARCO_17TRACK_BRIDGE_PORT", "8654"),
+    },
+    env_paths=MARCO_ENV_PATHS,
+)
+
+
+async def public_17track_proxy(request: Request):
+    token = request.path_params["token"]
+    body = await request.body()
+    headers = {}
+    for key in ("content-type", "x-request-id", "17track-event-id"):
+        if key in request.headers:
+            headers[key] = request.headers[key]
+    try:
+        async with httpx.AsyncClient(timeout=35) as client:
+            upstream = await client.post(
+                f"{MARCO_17TRACK_BRIDGE_URL}/17track/{token}",
+                content=body,
+                headers=headers,
+            )
+    except httpx.RequestError as exc:
+        return JSONResponse(
+            {"error": "17track bridge unavailable", "detail": str(exc)},
+            status_code=502,
+        )
+    return Response(
+        upstream.content,
+        status_code=upstream.status_code,
+        media_type=upstream.headers.get("content-type", "application/json"),
+    )
+
+
 async def homepage(request: Request):
     auth_err = require_auth(request)
     if auth_err:
@@ -303,7 +450,12 @@ async def homepage(request: Request):
 
 
 async def health(request: Request):
-    return JSONResponse({"status": "ok", "gateway": gateway.state})
+    return JSONResponse({
+        "status": "ok",
+        "gateway": gateway.state,
+        "marco_gateway": marco_gateway.state,
+        "track_bridge": track_bridge.state,
+    })
 
 
 async def api_config_get(request: Request):
@@ -559,6 +711,7 @@ async def auto_start_gateway():
 
 
 routes = [
+    Route("/17track/{token:path}", public_17track_proxy, methods=["POST"]),
     Route("/", homepage),
     Route("/health", health),
     Route("/api/config", api_config_get, methods=["GET"]),
@@ -578,7 +731,13 @@ routes = [
 @asynccontextmanager
 async def lifespan(app):
     await auto_start_gateway()
+    if (MARCO_PROFILE_HOME / "config.yaml").exists():
+        asyncio.create_task(marco_gateway.start())
+    if (MARCO_PROFILE_HOME / "mcp" / "17track_webhook_bridge.py").exists():
+        asyncio.create_task(track_bridge.start())
     yield
+    await track_bridge.stop()
+    await marco_gateway.stop()
     await gateway.stop()
 
 
