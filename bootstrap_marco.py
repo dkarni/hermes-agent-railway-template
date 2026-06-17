@@ -59,8 +59,10 @@ CONFIG_YAML = """mcp_servers:
     args:
       - "mcp-google-sheets@latest"
       - "--include-tools"
-      - "find_in_spreadsheet"
-      - "get_sheet_data"
+      - "find_in_spreadsheet,get_sheet_data"
+    env:
+      CREDENTIALS_CONFIG: "${CREDENTIALS_CONFIG}"
+      YK_DPD_SHEET_ID: "${YK_DPD_SHEET_ID}"
     timeout: 120
     connect_timeout: 60
     tools:
