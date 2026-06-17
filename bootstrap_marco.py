@@ -54,6 +54,18 @@ CONFIG_YAML = """mcp_servers:
     tools:
       prompts: false
       resources: false
+  google_sheets:
+    command: "uvx"
+    args:
+      - "mcp-google-sheets@latest"
+      - "--include-tools"
+      - "find_in_spreadsheet"
+      - "get_sheet_data"
+    timeout: 120
+    connect_timeout: 60
+    tools:
+      prompts: false
+      resources: false
 
 platforms:
   webhook:
