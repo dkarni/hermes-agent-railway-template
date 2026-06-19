@@ -42,6 +42,8 @@ PAIRING_DIR = Path(HERMES_HOME) / "pairing"
 CODE_TTL_SECONDS = 3600
 MARCO_PROFILE_HOME = Path(HERMES_HOME) / "profiles" / "marco"
 MARCO_ENV_PATHS = (MARCO_PROFILE_HOME / ".env", MARCO_PROFILE_HOME / "hermes.env")
+MAX_PROFILE_HOME = Path(HERMES_HOME) / "profiles" / "max"
+MAX_ENV_PATHS = (MAX_PROFILE_HOME / ".env", MAX_PROFILE_HOME / "hermes.env")
 MARCO_17TRACK_BRIDGE_URL = os.environ.get("MARCO_17TRACK_BRIDGE_URL", "http://127.0.0.1:8654").rstrip("/")
 
 # Registry of known Hermes env vars exposed in the UI.
@@ -414,6 +416,11 @@ track_bridge = ManagedProcess(
     },
     env_paths=MARCO_ENV_PATHS,
 )
+max_gateway = ManagedProcess(
+    "max gateway",
+    ["hermes", "-p", "max", "gateway", "run", "--replace"],
+    env_paths=MAX_ENV_PATHS,
+)
 
 
 async def public_17track_proxy(request: Request):
@@ -455,6 +462,7 @@ async def health(request: Request):
         "gateway": gateway.state,
         "marco_gateway": marco_gateway.state,
         "track_bridge": track_bridge.state,
+        "max_gateway": max_gateway.state,
     })
 
 
@@ -735,7 +743,10 @@ async def lifespan(app):
         asyncio.create_task(marco_gateway.start())
     if (MARCO_PROFILE_HOME / "mcp" / "17track_webhook_bridge.py").exists():
         asyncio.create_task(track_bridge.start())
+    if (MAX_PROFILE_HOME / "config.yaml").exists():
+        asyncio.create_task(max_gateway.start())
     yield
+    await max_gateway.stop()
     await track_bridge.stop()
     await marco_gateway.stop()
     await gateway.stop()
