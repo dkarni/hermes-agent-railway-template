@@ -152,8 +152,12 @@ labelled paper vs source vs blind. CSV export on wallets/journal/paper-trades.
   `{"error":"polymarket worker unavailable"}`. Restart the service.
 - **Stale data banners:** a monitor/pnl job hasn't succeeded recently — see
   `/polymarket/health` for last-success times and failed jobs (retry there).
-- **Partial scan warning:** the leaderboard scan didn't get all pages — usually
-  rate limiting; it self-heals next run.
+- **Partial scan warning:** the latest leaderboard scan for some category didn't
+  get all pages — usually rate limiting. The banner clears once the next
+  complete scan for that category lands. Partial scans only seed wallet
+  discovery; statuses are computed exclusively from wallets with fully
+  ingested history (`history_complete = 1`), so a partial scan can never
+  promote or downgrade anyone.
 - **No metrics:** with an empty DB most numbers are `—` until the first scans,
   profiles, and paper trades land. Filtered-vs-blind stays "insufficient sample"
   until both cohorts reach the minimum.

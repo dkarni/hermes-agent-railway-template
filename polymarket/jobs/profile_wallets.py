@@ -36,6 +36,15 @@ TRACKED_REFRESH_SECONDS = 6 * 3600
 OTHER_REFRESH_SECONDS = 24 * 3600
 
 
+def _next_due(status: str) -> str:
+    """Refresh deadline used by the health page's stale-profiles counter."""
+    from datetime import datetime, timedelta, timezone
+
+    seconds = TRACKED_REFRESH_SECONDS if status == "track" else OTHER_REFRESH_SECONDS
+    due = datetime.now(timezone.utc) + timedelta(seconds=seconds)
+    return due.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+
+
 async def run_profile_wallets(
     ctx: JobContext, config: Config, *, force_all: bool = False
 ) -> dict:
@@ -207,7 +216,7 @@ async def _persist_profile(
             resolved_trade_count = ?, trade_count = ?,
             profit_concentration_top1 = ?, profit_concentration_top3 = ?,
             max_drawdown_30d = ?, profile_window_start = ?, profile_window_end = ?,
-            calculated_at = ?, last_profiled_at = ?, raw_json = ?
+            calculated_at = ?, last_profiled_at = ?, next_profile_due_at = ?, raw_json = ?
          WHERE wallet_address = ?
         """,
         (
@@ -228,6 +237,7 @@ async def _persist_profile(
             _iso_from_ts(stats.window_end_ts),
             now,
             now,
+            _next_due(status),
             json_dumps(raw),
             wallet,
         ),

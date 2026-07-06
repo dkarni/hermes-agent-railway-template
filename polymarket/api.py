@@ -225,6 +225,8 @@ def create_app(
         Route(f"{api}/actions/review-outcomes", _action_handler("review-outcomes"), methods=["POST"]),
         Route(f"{api}/actions/evaluate-rules", _action_handler("evaluate-rules"), methods=["POST"]),
         Route(f"{api}/actions/generate-report", _action_handler("generate-report"), methods=["POST"]),
+        Route(f"{api}/actions/generate-weekly-report", _action_handler("generate-weekly-report"), methods=["POST"]),
+        Route(f"{api}/actions/health-check", _action_handler("health-check"), methods=["POST"]),
         Route(f"{api}/actions/reset-portfolio", _action_handler("reset-portfolio"), methods=["POST"]),
         Route(f"{api}/actions/retry-job/{{id}}", retry_job, methods=["POST"]),
         Route(f"{api}/actions/rollback-rule/{{version}}", rollback_rule, methods=["POST"]),

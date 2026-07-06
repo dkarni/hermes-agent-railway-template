@@ -17,7 +17,8 @@ main `/health` payload.
 
 ## Health checks
 
-- Main server: `GET /health` (basic auth) → includes `poly_worker` and
+- Main server: `GET /health` (public by design — it is Railway's healthcheck
+  path and exposes only process state strings, no data) → includes `poly_worker` and
   `polymarket_gateway` states.
 - Worker API: `GET /api/polymarket/health` → migrations, active rule version,
   scheduler jobs (expect 11), open positions, equity, and an `ops` block

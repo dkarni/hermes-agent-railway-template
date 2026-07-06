@@ -31,6 +31,8 @@ ACTION_JOBS: dict[str, str] = {
     "review-outcomes": "reviews",
     "evaluate-rules": "rule_eval",
     "generate-report": "daily_report",
+    "generate-weekly-report": "weekly_report",
+    "health-check": "health",
     "reset-portfolio": "reset_portfolio",
 }
 
@@ -119,6 +121,17 @@ def _coro_for(action: str, config: Config):
     if action == "generate-report":
         from .jobs.reports import run_daily_report
         return lambda ctx: run_daily_report(ctx, config)
+    if action == "generate-weekly-report":
+        from .jobs.reports import run_weekly_report
+        return lambda ctx: run_weekly_report(ctx, config)
+    if action == "health-check":
+        from .jobs.reports import check_drawdown_breach, check_repeated_job_failures
+
+        async def _health(ctx):
+            dd = await check_drawdown_breach(ctx.conn, config)
+            jf = await check_repeated_job_failures(ctx.conn)
+            return {"drawdown": dd, "job_failures": jf}
+        return _health
     if action == "reset-portfolio":
         from .jobs.portfolio_view import reset_portfolio
 

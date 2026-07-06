@@ -256,8 +256,15 @@ async def data_freshness(conn) -> dict:
         )
         row = await cur.fetchone()
         out[f"last_{job}_success_at"] = row[0] if row else None
+    # Only categories whose LATEST scan is partial: a partial scan self-heals
+    # on the next complete run and must not pin the warning banner forever.
     cur = await conn.execute(
-        "SELECT COUNT(*) FROM leaderboard_scans WHERE is_partial = 1"
+        """
+        SELECT COUNT(*) FROM (
+            SELECT category, MAX(id) AS max_id FROM leaderboard_scans GROUP BY source, category, time_period
+        ) latest JOIN leaderboard_scans ls ON ls.id = latest.max_id
+        WHERE ls.is_partial = 1
+        """
     )
     out["partial_scans"] = int((await cur.fetchone())[0])
     cur = await conn.execute(
@@ -617,6 +624,12 @@ async def journal(conn, params) -> dict:
         where.append("dj.wallet_address = ?")
         args.append(params["wallet"])
     label = params.get("label")
+    if label:
+        where.append(
+            "EXISTS (SELECT 1 FROM outcome_reviews orv WHERE orv.decision_journal_id = dj.id "
+            "AND orv.review_checkpoint = 'final' AND orv.decision_quality_label = ?)"
+        )
+        args.append(label)
     if params.get("since"):
         where.append("dj.created_at >= ?")
         args.append(params["since"])
@@ -635,10 +648,6 @@ async def journal(conn, params) -> dict:
     for r in await cur.fetchall():
         entry = await _signal_row(conn, dict(r), full=True)
         entry["reviews"] = await _reviews_for(conn, r["id"])
-        if label:
-            final = next((rv for rv in entry["reviews"] if rv["checkpoint"] == "final"), None)
-            if not final or final.get("decision_quality_label") != label:
-                continue
         items.append(entry)
     return {"total": total, "limit": limit, "offset": offset, "items": items}
 
