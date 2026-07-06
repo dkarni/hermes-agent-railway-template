@@ -234,13 +234,16 @@ class GatewayManager:
         try:
             env = os.environ.copy()
             env["HERMES_HOME"] = HERMES_HOME
+            # Upstream supervised-slot convention (see hermes s6 run-script):
+            # the sentinel pins this bare gateway to the root/default profile.
+            # Without it, hermes follows the sticky active_profile file and
+            # silently redirects the default gateway into a named profile,
+            # dueling with that profile's real gateway. run --replace is the
+            # matching takeover mode so stale volume locks never wedge startup.
+            env["HERMES_S6_SUPERVISED_CHILD"] = "1"
             env_vars = read_env_file(ENV_FILE_PATH)
             env.update(env_vars)
 
-            # run --replace: same launch mode as the profile gateways. The bare
-            # "hermes gateway" preflight cross-matches other profiles' gateway
-            # PIDs after a container restart recycles PIDs onto them, leaving
-            # the default gateway permanently in "error".
             self.process = await asyncio.create_subprocess_exec(
                 "hermes", "gateway", "run", "--replace",
                 stdout=asyncio.subprocess.PIPE,
@@ -251,6 +254,7 @@ class GatewayManager:
             self.start_time = time.time()
             task = asyncio.create_task(self._read_output())
             self._read_tasks.append(task)
+            self._read_tasks.append(asyncio.create_task(self._watch_exit(self.process)))
         except Exception as e:
             self.state = "error"
             self.logs.append(f"Failed to start gateway: {e}")
@@ -288,6 +292,21 @@ class GatewayManager:
         if self.process and self.process.returncode is not None and self.state == "running":
             self.state = "error"
             self.logs.append(f"Gateway exited with code {self.process.returncode}")
+
+    async def _watch_exit(self, process: asyncio.subprocess.Process):
+        # Self-heal like ManagedProcess: an unexpected exit (crash, manual
+        # `hermes gateway restart` from a shell, --replace duel) restarts the
+        # supervised child instead of leaving a stale "running"/"error" state.
+        code = await process.wait()
+        if self.state in ("stopping", "stopped") or self.process is not process:
+            return
+        self.state = "error"
+        self.logs.append(f"Gateway exited unexpectedly (code {code}); restarting in 5s")
+        await asyncio.sleep(5)
+        if self.state in ("stopping", "stopped") or self.process is not process:
+            return
+        self.restart_count += 1
+        await self.start()
 
     def get_status(self) -> dict:
         pid = None
@@ -408,6 +427,7 @@ class ManagedProcess:
 marco_gateway = ManagedProcess(
     "marco gateway",
     ["hermes", "-p", "marco", "gateway", "run", "--replace"],
+    env_overrides={"HERMES_S6_SUPERVISED_CHILD": "1"},
     env_paths=MARCO_ENV_PATHS,
 )
 track_bridge = ManagedProcess(
@@ -426,6 +446,7 @@ track_bridge = ManagedProcess(
 max_gateway = ManagedProcess(
     "max gateway",
     ["hermes", "-p", "max", "gateway", "run", "--replace"],
+    env_overrides={"HERMES_S6_SUPERVISED_CHILD": "1"},
     env_paths=MAX_ENV_PATHS,
 )
 poly_worker = ManagedProcess(
@@ -436,6 +457,7 @@ poly_worker = ManagedProcess(
 polymarket_gateway = ManagedProcess(
     "polymarket gateway",
     ["hermes", "-p", "polymarket", "gateway", "run", "--replace"],
+    env_overrides={"HERMES_S6_SUPERVISED_CHILD": "1"},
     env_paths=POLYMARKET_ENV_PATHS,
 )
 
