@@ -31,7 +31,7 @@
     <td>{{ t.outcome or '—' }}</td>
     <td class="font-mono text-xs">{{ money(t.entry_cost_usd) }}</td>
     <td class="font-mono text-xs">{{ t.entry_price or '—' }} / {{ t.source_entry_price or '—' }}</td>
-    <td class="font-mono text-xs">{{ t.current_mark or '—' }}{% if t.mark_is_stale %} <span class="text-amber-400">stale</span>{% endif %}</td>
+    <td class="font-mono text-xs">{{ t.current_mark or '—' }}{% if t.mark_is_stale %} <span style="color:#b7f4ff;">stale</span>{% endif %}</td>
     <td class="font-mono text-xs">{{ money(t.unrealized_pnl_usd) }}</td>
     <td class="font-mono text-xs">{{ money(t.realized_pnl_usd) }}</td>
     <td>{{ t.status }}</td>

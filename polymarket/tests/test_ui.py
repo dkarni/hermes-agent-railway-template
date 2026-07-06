@@ -19,7 +19,7 @@ async def _client_conn(tmp_path):
 
 
 PAGES = [
-    ("/polymarket", "PAPER TRADING ONLY"),
+    ("/polymarket", "Paper trading only"),
     ("/polymarket", "Filtered paper PnL vs blind copy"),
     ("/polymarket/wallets", "0xabc"),
     ("/polymarket/wallets/0xabc", "Category performance"),

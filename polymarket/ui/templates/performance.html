@@ -14,10 +14,21 @@
   <div class="text-sm font-semibold mb-2">Equity curve (paper)</div>
   {% if p.sparkline.empty %}<div class="text-xs text-gray-500">No pnl snapshots yet.</div>
   {% else %}
-  <svg viewBox="0 0 {{ p.sparkline.width }} {{ p.sparkline.height }}" width="100%" height="80" preserveAspectRatio="none">
-    <path d="{{ p.sparkline.path }}" fill="none" stroke="#34d399" stroke-width="2"/>
+  <svg viewBox="0 0 {{ p.sparkline.width }} {{ p.sparkline.height }}" width="100%" height="112" preserveAspectRatio="none" role="img" aria-label="Paper equity curve">
+    <defs>
+      <linearGradient id="performanceEquityFill" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0%" stop-color="#63e6ff" stop-opacity="0.22"/>
+        <stop offset="100%" stop-color="#63e6ff" stop-opacity="0"/>
+      </linearGradient>
+      <filter id="performanceEquityGlow" x="-10%" y="-40%" width="120%" height="180%">
+        <feGaussianBlur stdDeviation="2.4" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <path d="{{ p.sparkline.area_path }}" fill="url(#performanceEquityFill)"/>
+    <path d="{{ p.sparkline.path }}" fill="none" stroke="#63e6ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" filter="url(#performanceEquityGlow)"/>
   </svg>
-  <div class="text-xs text-gray-500">from ${{ p.sparkline.first }} to ${{ p.sparkline.last }}</div>
+  <div class="text-xs" style="color:var(--faint);">from {{ p.sparkline.first | money_amount }} to {{ p.sparkline.last | money_amount }}</div>
   {% endif %}
 </div>
 
@@ -29,7 +40,7 @@
     <tr><td>Blind</td><td>{{ p.blind.sample }}</td><td>{{ money(p.blind.net_pnl_usd,'blind') }}</td><td>{{ p.blind.roi }}</td><td>{{ p.blind.win_rate }}</td><td>{{ money(p.blind.avg_pnl_usd,'blind') }}</td><td>{{ p.blind.profit_factor or '—' }}</td><td>{{ money(p.blind.max_drawdown_usd,'blind') }}</td></tr>
   </table>
   <div class="text-sm mt-2">Verdict: <b>{{ p.comparison.verdict }}</b> · filtered − blind {{ money(p.comparison.filtered_minus_blind_pnl_usd) }}</div>
-  {% if p.comparison.caveat %}<div class="text-xs text-amber-300 mt-1">{{ p.comparison.caveat }}</div>{% endif %}
+  {% if p.comparison.caveat %}<div class="text-xs mt-2 flex items-start gap-2" style="color:#b7f4ff;"><svg class="icon mt-0.5" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 4.3 2.9 17a2 2 0 0 0 1.7 3h14.8a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z"/></svg><span>{{ p.comparison.caveat }}</span></div>{% endif %}
 </div>
 
 <div class="grid md:grid-cols-3 gap-4 mb-5">

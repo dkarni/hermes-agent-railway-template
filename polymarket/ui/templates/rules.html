@@ -6,8 +6,8 @@
 {% if r.active %}
 <div class="card p-4 mb-5">
   <div class="flex items-center gap-2 mb-2">
-    <span class="badge bg-green-700">active v{{ r.active.version }}</span>
-    <span class="text-xs text-gray-500">activated {{ r.active.activated_at }} · checksum {{ r.active.checksum[:12] }}</span>
+    <span class="badge">active v{{ r.active.version }}</span>
+    <span class="text-xs text-gray-500">activated {{ r.active.activated_at | calendar_time }} · checksum {{ r.active.checksum[:12] }}</span>
   </div>
   <details open>
     <summary class="text-sm">Current thresholds &amp; weights</summary>
@@ -24,13 +24,13 @@
     <tr>
       <td>v{{ v.version }}</td>
       <td>{{ v.status }}</td>
-      <td class="text-xs text-gray-500">{{ v.activated_at or '—' }}</td>
-      <td class="text-xs text-gray-500">{{ v.deactivated_at or '—' }}</td>
+      <td class="text-xs text-gray-500">{{ v.activated_at | calendar_time(empty='—') }}</td>
+      <td class="text-xs text-gray-500">{{ v.deactivated_at | calendar_time(empty='—') }}</td>
       <td>
         {% if v.status=='active' and v.version > 1 %}
         <form method="post" action="/api/polymarket/actions/rollback-rule/{{ v.version }}"
               onsubmit="return confirm('Roll back rule v{{ v.version }} to its parent?');">
-          <button class="badge bg-red-800 text-white">rollback</button>
+          <button class="badge">rollback</button>
         </form>
         {% endif %}
       </td>
@@ -51,7 +51,7 @@
       <td class="font-mono text-xs">{{ c.old_value }}</td>
       <td class="font-mono text-xs">{{ c.new_value }}</td>
       <td>{{ c.outcome_status or 'pending' }}</td>
-      <td class="text-xs text-gray-500">{{ c.created_at }}</td>
+      <td class="text-xs text-gray-500">{{ c.created_at | calendar_time }}</td>
     </tr>
     {% else %}<tr><td colspan="7" class="text-gray-600">No rule changes yet.</td></tr>{% endfor %}
   </table>

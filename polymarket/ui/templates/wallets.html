@@ -49,7 +49,7 @@
     <td>{{ money(w.pnl_30d_usd, 'source') }}</td>
     <td>{{ w.resolved_trade_count }}</td>
     <td>{{ w.best_category or '—' }}</td>
-    <td class="text-xs text-gray-500">{{ w.last_signal_at or '—' }}</td>
+    <td class="text-xs text-gray-500">{{ w.last_signal_at | relative_time(empty='—') }}</td>
   </tr>
   {% else %}<tr><td colspan="11" class="text-gray-600">No wallets match.</td></tr>{% endfor %}
 </table>

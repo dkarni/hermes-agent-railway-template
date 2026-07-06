@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import re
+from math import sin, tau
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
@@ -137,13 +138,17 @@ def _sparkline(series: list[dict], *, width=520, height=60) -> dict:
     pad = Decimal(8)
     drawable_height = Decimal(height) - (pad * 2)
     coords: list[tuple[float, float]] = []
-    for i, v in enumerate(values):
-        x = (Decimal(i) / Decimal(n - 1)) * Decimal(width)
-        if span == 0:
-            y = Decimal(height) / Decimal(2)
-        else:
+    if span == 0:
+        render_count = max(n, 6)
+        for i in range(render_count):
+            x = (i / (render_count - 1)) * width
+            y = (height / 2) + (sin((i / (render_count - 1)) * tau) * 3.5)
+            coords.append((float(x), float(y)))
+    else:
+        for i, v in enumerate(values):
+            x = (Decimal(i) / Decimal(n - 1)) * Decimal(width)
             y = pad + (Decimal(1) - ((v - lo) / span)) * drawable_height
-        coords.append((float(x), float(y)))
+            coords.append((float(x), float(y)))
 
     def pt(i: int) -> tuple[float, float]:
         return coords[min(max(i, 0), len(coords) - 1)]

@@ -26,7 +26,7 @@
     <td class="font-mono text-xs">{{ s.source_entry_price or '—' }} → {{ s.executable_entry_price or '—' }}</td>
     <td class="font-mono text-xs">{{ s.price_move_absolute or '—' }}</td>
     <td class="text-xs">{{ s.detection_delay_seconds if s.detection_delay_seconds is not none else '—' }}s</td>
-    <td><span class="badge {{ 'bg-green-700' if s.decision=='paper_copy' else ('bg-yellow-700' if s.decision=='watchlist' else 'bg-gray-700') }}">{{ s.decision }}</span></td>
+    <td><span class="badge">{{ s.decision }}</span></td>
     <td class="font-mono">{{ s.total_score if s.total_score is not none else '—' }}</td>
     <td>v{{ s.rule_version if s.rule_version is not none else '—' }}</td>
     <td>

@@ -25,10 +25,10 @@
 {% for e in result["items"] %}
 <div class="card p-4 mb-3">
   <div class="flex items-center gap-2 mb-1">
-    <span class="badge {{ 'bg-green-700' if e.decision=='paper_copy' else ('bg-yellow-700' if e.decision=='watchlist' else 'bg-gray-700') }}">{{ e.decision }}</span>
+    <span class="badge">{{ e.decision }}</span>
     <span class="font-mono">score {{ e.total_score if e.total_score is not none else '—' }}</span>
     <a href="/polymarket/wallets/{{ e.wallet_address }}" class="text-xs">{{ e.wallet_address[:12] }}</a>
-    <span class="text-xs text-gray-500 ml-auto">{{ e.created_at }} · rule v{{ e.rule_version if e.rule_version is not none else '—' }}</span>
+    <span class="text-xs text-gray-500 ml-auto">{{ e.created_at | calendar_time }} · rule v{{ e.rule_version if e.rule_version is not none else '—' }}</span>
   </div>
   <div class="text-sm mb-1">{{ e.market.question if e.market else '—' }} <span class="text-gray-500">{{ e.outcome or '' }}</span></div>
   {{ components(e.component_scores) }}
@@ -50,7 +50,7 @@
       {% else %}<tr><td colspan="6" class="text-gray-600">No reviews yet.</td></tr>{% endfor %}
     </table>
     {% set final = e.reviews | selectattr('checkpoint','equalto','final') | list | first %}
-    {% if final and final.lesson %}<div class="text-amber-300 mt-1">Lesson: {{ final.lesson }}</div>{% endif %}
+    {% if final and final.lesson %}<div class="mt-1" style="color:#b7f4ff;">Lesson: {{ final.lesson }}</div>{% endif %}
   </div>
 </div>
 {% else %}

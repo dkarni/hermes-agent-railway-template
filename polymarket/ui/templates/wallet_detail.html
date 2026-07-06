@@ -24,7 +24,12 @@
     <div class="text-sm font-semibold mb-2">Wallet's paper-copy performance</div>
     <div class="text-sm">Resolved paper trades: {{ w.paper_copy_performance.resolved_trades }}</div>
     <div class="text-sm">Realized: {{ money(w.paper_copy_performance.realized_pnl_usd) }}</div>
-    {% if not w.history_complete %}<div class="text-xs text-amber-300 mt-2">⚠ Data-completeness: history not fully ingested.</div>{% endif %}
+    {% if not w.history_complete %}
+    <div class="text-xs mt-2 flex items-start gap-2" style="color:#b7f4ff;">
+      <svg class="icon mt-0.5" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 4.3 2.9 17a2 2 0 0 0 1.7 3h14.8a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z"/></svg>
+      <span>Data-completeness: history not fully ingested.</span>
+    </div>
+    {% endif %}
   </div>
 </div>
 
@@ -44,7 +49,7 @@
     <table>
       <tr><th>v</th><th>Status</th><th>Score</th><th>Reason</th><th>At</th></tr>
       {% for s in w.snapshots %}
-      <tr><td>{{ s.profile_version }}</td><td>{{ s.status }}</td><td class="font-mono">{{ s.global_score }}</td><td class="text-xs">{{ s.status_reason_code or '' }}</td><td class="text-xs text-gray-500">{{ s.captured_at }}</td></tr>
+      <tr><td>{{ s.profile_version }}</td><td>{{ s.status }}</td><td class="font-mono">{{ s.global_score }}</td><td class="text-xs">{{ s.status_reason_code or '' }}</td><td class="text-xs text-gray-500">{{ s.captured_at | calendar_time }}</td></tr>
       {% else %}<tr><td colspan="5" class="text-gray-600">No history.</td></tr>{% endfor %}
     </table>
   </div>
