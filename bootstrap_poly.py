@@ -109,6 +109,7 @@ def main() -> None:
     SKILL_DIR.mkdir(parents=True, exist_ok=True)
 
     copy_if_missing(BOOTSTRAP_MCP / "polymarket_server.py", MCP_DIR / "polymarket_server.py", 0o755)
+    copy_if_missing(BOOTSTRAP_POLY / "SOUL.md", PROFILE / "SOUL.md")
     write_if_missing(SKILL_DIR / "SKILL.md", (BOOTSTRAP_POLY / "SKILL.md").read_text(encoding="utf-8")
                      if (BOOTSTRAP_POLY / "SKILL.md").exists() else "# Polymarket Research Operator\n")
     merge_config(CONFIG_YAML)
