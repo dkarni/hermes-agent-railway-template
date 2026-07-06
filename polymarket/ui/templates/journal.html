@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "_macros.html" import pager, money, components %}
+{% block title %}Decision journal — Polymarket Research{% endblock %}
+{% block content %}
+<h1 class="text-xl font-bold mb-3">Decision journal</h1>
+
+<form method="get" class="card p-3 mb-4 flex flex-wrap gap-3 text-sm items-end">
+  <label>Decision<br>
+    <select name="decision" class="bg-gray-800 rounded px-2 py-1">
+      <option value="">any</option>
+      {% for d in ['paper_copy','watchlist','skip'] %}<option value="{{ d }}" {{ 'selected' if query.get('decision')==d }}>{{ d }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Final label<br>
+    <select name="label" class="bg-gray-800 rounded px-2 py-1">
+      <option value="">any</option>
+      {% for l in ['good_copy','bad_copy','missed_winner','avoided_loser','good_skip','bad_skip'] %}<option value="{{ l }}" {{ 'selected' if query.get('label')==l }}>{{ l }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Wallet<br><input name="wallet" value="{{ query.get('wallet','') }}" class="bg-gray-800 rounded px-2 py-1"></label>
+  <button class="bg-blue-700 text-white rounded px-3 py-1">Filter</button>
+  <a class="ml-auto" href="/api/polymarket/journal?format=csv{% for k,v in query.items() if k not in ['format'] %}&{{k}}={{v}}{% endfor %}">Export CSV</a>
+</form>
+
+{% for e in result["items"] %}
+<div class="card p-4 mb-3">
+  <div class="flex items-center gap-2 mb-1">
+    <span class="badge {{ 'bg-green-700' if e.decision=='paper_copy' else ('bg-yellow-700' if e.decision=='watchlist' else 'bg-gray-700') }}">{{ e.decision }}</span>
+    <span class="font-mono">score {{ e.total_score if e.total_score is not none else '—' }}</span>
+    <a href="/polymarket/wallets/{{ e.wallet_address }}" class="text-xs">{{ e.wallet_address[:12] }}</a>
+    <span class="text-xs text-gray-500 ml-auto">{{ e.created_at }} · rule v{{ e.rule_version if e.rule_version is not none else '—' }}</span>
+  </div>
+  <div class="text-sm mb-1">{{ e.market.question if e.market else '—' }} <span class="text-gray-500">{{ e.outcome or '' }}</span></div>
+  {{ components(e.component_scores) }}
+  <div class="grid md:grid-cols-3 gap-3 text-xs mt-2">
+    <div><div class="text-gray-500">Reasons</div>{% for r in (e.reasons or []) %}<div class="text-green-300">+ {{ r }}</div>{% endfor %}</div>
+    <div><div class="text-gray-500">Risks</div>{% for r in (e.risks or []) %}<div class="text-red-300">- {{ r }}</div>{% endfor %}</div>
+    <div><div class="text-gray-500">Data at decision</div>
+      <div>src {{ e.source_entry_price or '—' }} → exec {{ e.executable_entry_price or '—' }}</div>
+      <div>data q. {{ e.data_quality_score if e.data_quality_score is not none else '—' }}</div>
+      <div>gates: {{ e.hard_gates }}</div>
+    </div>
+  </div>
+  <div class="mt-2 text-xs">
+    <div class="text-gray-500 mb-1">Reviews</div>
+    <table>
+      <tr><th>Checkpoint</th><th>Price</th><th>Hypo. PnL</th><th>Actual PnL</th><th>Label</th><th>Eligible</th></tr>
+      {% for rv in e.reviews %}
+      <tr><td>{{ rv.checkpoint }}</td><td class="font-mono">{{ rv.price_at_checkpoint or '—' }}</td><td>{{ money(rv.hypothetical_pnl_usd) }}</td><td>{{ money(rv.actual_pnl_usd) }}</td><td>{{ rv.decision_quality_label or '—' }}</td><td>{{ 'yes' if rv.eligible_for_learning else 'no' }}</td></tr>
+      {% else %}<tr><td colspan="6" class="text-gray-600">No reviews yet.</td></tr>{% endfor %}
+    </table>
+    {% set final = e.reviews | selectattr('checkpoint','equalto','final') | list | first %}
+    {% if final and final.lesson %}<div class="text-amber-300 mt-1">Lesson: {{ final.lesson }}</div>{% endif %}
+  </div>
+</div>
+{% else %}
+<div class="card p-4 text-gray-600">No journal entries.</div>
+{% endfor %}
+{{ pager(result, '/polymarket/journal', query) }}
+{% endblock %}

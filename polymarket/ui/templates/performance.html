@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "_macros.html" import money %}
+{% block title %}Performance — Polymarket Research{% endblock %}
+{% block content %}
+<h1 class="text-xl font-bold mb-1">Performance</h1>
+<form method="get" class="mb-4 text-sm">
+  Window:
+  {% for wnd in ['7d','30d','90d','all'] %}
+    <a href="/polymarket/performance?window={{ wnd }}" class="{{ 'text-white font-bold underline' if p.window==wnd else 'text-gray-400' }}">{{ wnd }}</a>
+  {% endfor %}
+</form>
+
+<div class="card p-4 mb-5">
+  <div class="text-sm font-semibold mb-2">Equity curve (paper)</div>
+  {% if p.sparkline.empty %}<div class="text-xs text-gray-500">No pnl snapshots yet.</div>
+  {% else %}
+  <svg viewBox="0 0 {{ p.sparkline.width }} {{ p.sparkline.height }}" width="100%" height="80" preserveAspectRatio="none">
+    <path d="{{ p.sparkline.path }}" fill="none" stroke="#34d399" stroke-width="2"/>
+  </svg>
+  <div class="text-xs text-gray-500">from ${{ p.sparkline.first }} to ${{ p.sparkline.last }}</div>
+  {% endif %}
+</div>
+
+<div class="card p-4 mb-5">
+  <div class="text-sm font-semibold mb-2">Filtered vs blind</div>
+  <table>
+    <tr><th></th><th>Sample</th><th>Net PnL</th><th>ROI</th><th>Win</th><th>Avg PnL</th><th>Profit factor</th><th>Max DD</th></tr>
+    <tr><td>Filtered</td><td>{{ p.filtered.sample }}</td><td>{{ money(p.filtered.net_pnl_usd) }}</td><td>{{ p.filtered.roi }}</td><td>{{ p.filtered.win_rate }}</td><td>{{ money(p.filtered.avg_pnl_usd) }}</td><td>{{ p.filtered.profit_factor or '—' }}</td><td>{{ money(p.filtered.max_drawdown_usd) }}</td></tr>
+    <tr><td>Blind</td><td>{{ p.blind.sample }}</td><td>{{ money(p.blind.net_pnl_usd,'blind') }}</td><td>{{ p.blind.roi }}</td><td>{{ p.blind.win_rate }}</td><td>{{ money(p.blind.avg_pnl_usd,'blind') }}</td><td>{{ p.blind.profit_factor or '—' }}</td><td>{{ money(p.blind.max_drawdown_usd,'blind') }}</td></tr>
+  </table>
+  <div class="text-sm mt-2">Verdict: <b>{{ p.comparison.verdict }}</b> · filtered − blind {{ money(p.comparison.filtered_minus_blind_pnl_usd) }}</div>
+  {% if p.comparison.caveat %}<div class="text-xs text-amber-300 mt-1">{{ p.comparison.caveat }}</div>{% endif %}
+</div>
+
+<div class="grid md:grid-cols-3 gap-4 mb-5">
+  <div class="card p-4">
+    <div class="text-sm font-semibold mb-2">By category</div>
+    <table><tr><th>Category</th><th>Trades</th><th>PnL</th></tr>
+    {% for c in p.category_performance %}<tr><td>{{ c.category }}</td><td>{{ c.trades }}</td><td>{{ money(c.realized_pnl_usd) }}</td></tr>{% else %}<tr><td colspan="3" class="text-gray-600">—</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="card p-4">
+    <div class="text-sm font-semibold mb-2">By wallet</div>
+    <table><tr><th>Wallet</th><th>Trades</th><th>PnL</th></tr>
+    {% for w in p.wallet_performance %}<tr><td><a href="/polymarket/wallets/{{ w.wallet_address }}">{{ w.wallet_address[:10] }}</a></td><td>{{ w.trades }}</td><td>{{ money(w.realized_pnl_usd) }}</td></tr>{% else %}<tr><td colspan="3" class="text-gray-600">—</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="card p-4">
+    <div class="text-sm font-semibold mb-2">By rule version</div>
+    <table><tr><th>Version</th><th>Trades</th><th>PnL</th></tr>
+    {% for r in p.rule_version_performance %}<tr><td>v{{ r.rule_version if r.rule_version is not none else '—' }}</td><td>{{ r.trades }}</td><td>{{ money(r.realized_pnl_usd) }}</td></tr>{% else %}<tr><td colspan="3" class="text-gray-600">—</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+
+<div class="card p-4">
+  <div class="text-sm font-semibold mb-2">Decision quality (final reviews)</div>
+  <div class="flex flex-wrap gap-4 text-sm">
+    {% for label, count in p.decision_quality_labels.items() %}
+      <div><span class="text-gray-500">{{ label }}</span> <b class="font-mono">{{ count }}</b></div>
+    {% else %}<div class="text-gray-600">No judged reviews yet.</div>{% endfor %}
+  </div>
+</div>
+{% endblock %}

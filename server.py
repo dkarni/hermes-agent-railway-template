@@ -42,6 +42,11 @@ PAIRING_DIR = Path(HERMES_HOME) / "pairing"
 CODE_TTL_SECONDS = 3600
 MARCO_PROFILE_HOME = Path(HERMES_HOME) / "profiles" / "marco"
 MARCO_ENV_PATHS = (MARCO_PROFILE_HOME / ".env", MARCO_PROFILE_HOME / "hermes.env")
+MAX_PROFILE_HOME = Path(HERMES_HOME) / "profiles" / "max"
+MAX_ENV_PATHS = (MAX_PROFILE_HOME / ".env", MAX_PROFILE_HOME / "hermes.env")
+POLYMARKET_PROFILE_HOME = Path(HERMES_HOME) / "profiles" / "polymarket"
+POLYMARKET_ENV_PATHS = (POLYMARKET_PROFILE_HOME / ".env", POLYMARKET_PROFILE_HOME / "hermes.env")
+POLY_WORKER_URL = os.environ.get("POLY_WORKER_URL", "http://127.0.0.1:8700").rstrip("/")
 MARCO_17TRACK_BRIDGE_URL = os.environ.get("MARCO_17TRACK_BRIDGE_URL", "http://127.0.0.1:8654").rstrip("/")
 
 # Registry of known Hermes env vars exposed in the UI.
@@ -232,8 +237,12 @@ class GatewayManager:
             env_vars = read_env_file(ENV_FILE_PATH)
             env.update(env_vars)
 
+            # run --replace: same launch mode as the profile gateways. The bare
+            # "hermes gateway" preflight cross-matches other profiles' gateway
+            # PIDs after a container restart recycles PIDs onto them, leaving
+            # the default gateway permanently in "error".
             self.process = await asyncio.create_subprocess_exec(
-                "hermes", "gateway",
+                "hermes", "gateway", "run", "--replace",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 env=env,
@@ -414,6 +423,53 @@ track_bridge = ManagedProcess(
     },
     env_paths=MARCO_ENV_PATHS,
 )
+max_gateway = ManagedProcess(
+    "max gateway",
+    ["hermes", "-p", "max", "gateway", "run", "--replace"],
+    env_paths=MAX_ENV_PATHS,
+)
+poly_worker = ManagedProcess(
+    "poly worker",
+    ["python", "-m", "polymarket.worker"],
+    cwd="/app",
+)
+polymarket_gateway = ManagedProcess(
+    "polymarket gateway",
+    ["hermes", "-p", "polymarket", "gateway", "run", "--replace"],
+    env_paths=POLYMARKET_ENV_PATHS,
+)
+
+# Shared client for the polymarket worker proxy (loopback, sane timeout).
+poly_http = httpx.AsyncClient(timeout=30.0)
+
+
+async def poly_proxy(request: Request):
+    # require_auth FIRST: the worker is loopback-only, this is the auth boundary.
+    auth_err = require_auth(request)
+    if auth_err:
+        return auth_err
+    path = request.url.path
+    url = f"{POLY_WORKER_URL}{path}"
+    if request.url.query:
+        url = f"{url}?{request.url.query}"
+    body = await request.body()
+    headers = {}
+    if "content-type" in request.headers:
+        headers["content-type"] = request.headers["content-type"]
+    try:
+        upstream = await poly_http.request(
+            request.method, url, content=body, headers=headers,
+        )
+    except httpx.RequestError as exc:
+        return JSONResponse(
+            {"error": "polymarket worker unavailable", "detail": str(exc)},
+            status_code=502,
+        )
+    return Response(
+        upstream.content,
+        status_code=upstream.status_code,
+        media_type=upstream.headers.get("content-type", "application/json"),
+    )
 
 
 async def public_17track_proxy(request: Request):
@@ -455,6 +511,9 @@ async def health(request: Request):
         "gateway": gateway.state,
         "marco_gateway": marco_gateway.state,
         "track_bridge": track_bridge.state,
+        "max_gateway": max_gateway.state,
+        "poly_worker": poly_worker.state,
+        "polymarket_gateway": polymarket_gateway.state,
     })
 
 
@@ -712,6 +771,10 @@ async def auto_start_gateway():
 
 routes = [
     Route("/17track/{token:path}", public_17track_proxy, methods=["POST"]),
+    # Polymarket research: proxy to the loopback worker (auth enforced in handler).
+    Route("/polymarket", poly_proxy, methods=["GET", "POST"]),
+    Route("/polymarket/{path:path}", poly_proxy, methods=["GET", "POST"]),
+    Route("/api/polymarket/{path:path}", poly_proxy, methods=["GET", "POST"]),
     Route("/", homepage),
     Route("/health", health),
     Route("/api/config", api_config_get, methods=["GET"]),
@@ -735,7 +798,16 @@ async def lifespan(app):
         asyncio.create_task(marco_gateway.start())
     if (MARCO_PROFILE_HOME / "mcp" / "17track_webhook_bridge.py").exists():
         asyncio.create_task(track_bridge.start())
+    if (MAX_PROFILE_HOME / "config.yaml").exists():
+        asyncio.create_task(max_gateway.start())
+    if os.environ.get("POLYMARKET_ENABLED", "1") != "0":
+        asyncio.create_task(poly_worker.start())
+    if (POLYMARKET_PROFILE_HOME / "config.yaml").exists():
+        asyncio.create_task(polymarket_gateway.start())
     yield
+    await polymarket_gateway.stop()
+    await poly_worker.stop()
+    await max_gateway.stop()
     await track_bridge.stop()
     await marco_gateway.stop()
     await gateway.stop()

@@ -91,7 +91,18 @@ Marco handles logistics and shipping operations for Ethnic Musical.
 
 ## 17TRACK Webhooks
 
-When a 17TRACK webhook arrives, call `mcp_17track_store_webhook_update` with the full payload. Then inspect status and decide whether a concise Telegram alert to Daniel is warranted.
+When a 17TRACK webhook arrives:
+
+1. Call `mcp_17track_store_webhook_update` with the webhook JSON payload.
+2. Extract every tracking number from the payload.
+3. Search `/data/marco-brain/cases/Open/` for each TN.
+4. If an open case matches, patch that case file:
+   - overwrite `## Last snapshot:` with `## Last snapshot: YYYY-MM-DD HH:MM UTC - {one-line carrier status}`
+   - append a `## Log` bullet: `- YYYY-MM-DD HH:MM UTC - 17TRACK webhook: {event summary}`
+   - include carrier/status/location/event time when present in the payload
+5. If no open case matches, store the payload and say no open case matched.
+
+Do not ask Daniel to paste the webhook JSON. For routine in-transit/info-received updates, update the file and keep the response short. Send Daniel a concise alert only for important events: delivered, failed delivery, exception, customs issue, returned to sender, out for delivery, pickup ready, expired, or a status needing action.
 """
 
 
@@ -187,7 +198,7 @@ def ensure_subscription() -> None:
     entry.setdefault("secret", os.environ.get("MARCO_17TRACK_HERMES_SECRET") or secrets.token_urlsafe(32))
     entry.setdefault(
         "prompt",
-        "17TRACK webhook payload received. First call mcp_17track_store_webhook_update with the full payload. Then inspect the package status/event. Send D a concise Telegram alert only if the event is important: delivered, failed delivery, exception, customs issue, returned to sender, out for delivery, pickup ready, expired, or no-action status that still needs attention. For routine in-transit/info-received updates, store the update and reply with no user-facing alert beyond a one-line internal note.",
+        "17TRACK webhook payload received. Payload JSON:\n```json\n{__raw__}\n```\n\nFirst call mcp_17track_store_webhook_update with the JSON payload above. Do not ask Daniel to paste the payload. Extract every tracking number from the payload, then grep /data/marco-brain/cases/Open/ for each TN. If an open case matches, patch that case file: overwrite `## Last snapshot:` with `## Last snapshot: YYYY-MM-DD HH:MM UTC - {one-line carrier status}` and append a `## Log` bullet `- YYYY-MM-DD HH:MM UTC - 17TRACK webhook: {event summary}`. Include carrier/status/location/event time when present. If no open case matches, store the payload and say no open case matched. Send Daniel a concise Telegram alert only if the event is important: delivered, failed delivery, exception, customs issue, returned to sender, out for delivery, pickup ready, expired, or no-action status needing attention. For routine in-transit/info-received updates, update the case file and keep the response short.",
     )
     entry.setdefault("skills", ["logistics-ops"])
     entry.setdefault("deliver", "telegram")

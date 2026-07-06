@@ -41,6 +41,8 @@ COPY templates/ /app/templates/
 COPY start.sh /app/start.sh
 COPY bootstrap_marco.py /app/bootstrap_marco.py
 COPY bootstrap_max.py /app/bootstrap_max.py
+COPY bootstrap_poly.py /app/bootstrap_poly.py
+COPY polymarket/ /app/polymarket/
 COPY bootstrap_files/ /app/bootstrap_files/
 RUN chmod +x /app/start.sh
 

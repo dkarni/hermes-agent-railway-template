@@ -5,7 +5,9 @@ dist/
 build/
 .env
 .venv/
+.venv-poly/
 venv/
+local-data/
 *.swp
 *.swo
 .DS_Store

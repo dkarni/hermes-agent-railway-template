@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "_macros.html" import pager, sortlink, money, components %}
+{% block title %}Signals — Polymarket Research{% endblock %}
+{% block content %}
+<h1 class="text-xl font-bold mb-3">Trade signals</h1>
+
+<form method="get" class="card p-3 mb-4 flex flex-wrap gap-3 text-sm items-end">
+  <label>Decision<br>
+    <select name="decision" class="bg-gray-800 rounded px-2 py-1">
+      <option value="">any</option>
+      {% for d in ['paper_copy','watchlist','skip'] %}<option value="{{ d }}" {{ 'selected' if query.get('decision')==d }}>{{ d }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Wallet<br><input name="wallet" value="{{ query.get('wallet','') }}" class="bg-gray-800 rounded px-2 py-1"></label>
+  <label>Since (ISO)<br><input name="since" value="{{ query.get('since','') }}" class="bg-gray-800 rounded px-2 py-1"></label>
+  <button class="bg-blue-700 text-white rounded px-3 py-1">Filter</button>
+</form>
+
+<div class="card p-2">
+<table>
+  <tr><th>Wallet</th><th>Market / outcome</th><th>Src → exec</th><th>Move</th><th>Delay</th><th>Decision</th><th>{{ sortlink('/polymarket/signals', query, 'score', 'Score') }}</th><th>Rule</th><th></th></tr>
+  {% for s in result["items"] %}
+  <tr>
+    <td><a href="/polymarket/wallets/{{ s.wallet_address }}">{{ s.wallet_address[:10] }}</a></td>
+    <td class="text-xs">{{ (s.market.question if s.market else '—') }}<div class="text-gray-500">{{ s.outcome or '' }} · {{ (s.market.category if s.market else '') }}</div></td>
+    <td class="font-mono text-xs">{{ s.source_entry_price or '—' }} → {{ s.executable_entry_price or '—' }}</td>
+    <td class="font-mono text-xs">{{ s.price_move_absolute or '—' }}</td>
+    <td class="text-xs">{{ s.detection_delay_seconds if s.detection_delay_seconds is not none else '—' }}s</td>
+    <td><span class="badge {{ 'bg-green-700' if s.decision=='paper_copy' else ('bg-yellow-700' if s.decision=='watchlist' else 'bg-gray-700') }}">{{ s.decision }}</span></td>
+    <td class="font-mono">{{ s.total_score if s.total_score is not none else '—' }}</td>
+    <td>v{{ s.rule_version if s.rule_version is not none else '—' }}</td>
+    <td>
+      <details>
+        <summary>why</summary>
+        <div class="text-xs mt-1">
+          {{ components(s.component_scores) }}
+          <div class="text-green-300 mt-1">+ {{ (s.top_reasons or []) | join('; ') if s.top_reasons is iterable and s.top_reasons is not string else s.top_reasons }}</div>
+          <div class="text-red-300">risk: {{ s.top_risk or '—' }}</div>
+          <div class="text-gray-500">reason code: {{ s.decision_reason_code or '—' }}</div>
+        </div>
+      </details>
+    </td>
+  </tr>
+  {% else %}<tr><td colspan="9" class="text-gray-600">No signals recorded.</td></tr>{% endfor %}
+</table>
+</div>
+{{ pager(result, '/polymarket/signals', query) }}
+{% endblock %}

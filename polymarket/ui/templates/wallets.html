@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "_macros.html" import pager, sortlink, money, components %}
+{% block title %}Wallets — Polymarket Research{% endblock %}
+{% block content %}
+<h1 class="text-xl font-bold mb-3">Wallet rankings</h1>
+
+<form method="get" class="card p-3 mb-4 flex flex-wrap gap-3 text-sm items-end">
+  <label>Category<br><input name="category" value="{{ query.get('category','') }}" class="bg-gray-800 rounded px-2 py-1"></label>
+  <label>Status<br>
+    <select name="status" class="bg-gray-800 rounded px-2 py-1">
+      <option value="">any</option>
+      {% for s in ['track','watch','ignore','data_error'] %}
+      <option value="{{ s }}" {{ 'selected' if query.get('status')==s }}>{{ s }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Min score<br><input name="min_score" value="{{ query.get('min_score','') }}" class="bg-gray-800 rounded px-2 py-1 w-20"></label>
+  <label>Min resolved<br><input name="min_resolved" value="{{ query.get('min_resolved','') }}" class="bg-gray-800 rounded px-2 py-1 w-20"></label>
+  <label class="flex items-center gap-1"><input type="checkbox" name="copyable_only" value="1" {{ 'checked' if query.get('copyable_only') }}> copyable only</label>
+  <label class="flex items-center gap-1"><input type="checkbox" name="exclude_stale" value="1" {{ 'checked' if query.get('exclude_stale') }}> exclude stale</label>
+  <button class="bg-blue-700 text-white rounded px-3 py-1">Filter</button>
+  <a class="ml-auto" href="/api/polymarket/wallets?format=csv{% for k,v in query.items() if k not in ['format'] %}&{{k}}={{v}}{% endfor %}">Export CSV</a>
+</form>
+
+<div class="text-xs text-gray-500 mb-1">Default rank: copied paper PnL contribution. Raw source PnL sort available via the column header.</div>
+<div class="card p-2">
+<table>
+  <tr>
+    <th>Wallet</th>
+    <th>{{ sortlink('/polymarket/wallets', query, 'paper_pnl', 'Copied paper PnL') }}</th>
+    <th>Copies</th>
+    <th>Copy win</th>
+    <th>Avg slip</th>
+    <th>{{ sortlink('/polymarket/wallets', query, 'score', 'Score') }}</th>
+    <th>Status</th>
+    <th>{{ sortlink('/polymarket/wallets', query, 'raw_pnl', 'Raw PnL') }}</th>
+    <th>{{ sortlink('/polymarket/wallets', query, 'resolved', 'Resolved') }}</th>
+    <th>Best cat</th>
+    <th>Last signal</th>
+  </tr>
+  {% for w in result["items"] %}
+  <tr>
+    <td><a href="/polymarket/wallets/{{ w.wallet_address }}">{{ w.label or w.wallet_address[:12] }}</a>{% if w.is_demo %} <span class="badge bg-purple-800">demo</span>{% endif %}</td>
+    <td>{{ money(w.copied_paper_pnl_usd) }}</td>
+    <td>{{ w.copied_trade_count }}</td>
+    <td class="font-mono">{{ w.copy_win_rate or '—' }}</td>
+    <td class="font-mono">{{ w.avg_entry_slippage or '—' }}</td>
+    <td class="font-mono">{{ w.global_score if w.global_score is not none else '—' }} {{ components(w.score_components) }}</td>
+    <td>{{ w.status }}<div class="text-[0.65rem] text-gray-500">{{ w.status_reason_code or '' }}</div></td>
+    <td>{{ money(w.pnl_30d_usd, 'source') }}</td>
+    <td>{{ w.resolved_trade_count }}</td>
+    <td>{{ w.best_category or '—' }}</td>
+    <td class="text-xs text-gray-500">{{ w.last_signal_at or '—' }}</td>
+  </tr>
+  {% else %}<tr><td colspan="11" class="text-gray-600">No wallets match.</td></tr>{% endfor %}
+</table>
+</div>
+{{ pager(result, '/polymarket/wallets', query) }}
+{% endblock %}

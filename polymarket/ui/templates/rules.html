@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Rules — Polymarket Research{% endblock %}
+{% block content %}
+<h1 class="text-xl font-bold mb-3">Rule sets</h1>
+
+{% if r.active %}
+<div class="card p-4 mb-5">
+  <div class="flex items-center gap-2 mb-2">
+    <span class="badge bg-green-700">active v{{ r.active.version }}</span>
+    <span class="text-xs text-gray-500">activated {{ r.active.activated_at }} · checksum {{ r.active.checksum[:12] }}</span>
+  </div>
+  <details open>
+    <summary class="text-sm">Current thresholds &amp; weights</summary>
+    <pre class="text-xs bg-gray-950 rounded p-3 mt-2 overflow-auto">{{ r.active.parameters | tojson(indent=2) }}</pre>
+  </details>
+</div>
+{% endif %}
+
+<div class="card p-4 mb-5">
+  <div class="text-sm font-semibold mb-2">Version history</div>
+  <table>
+    <tr><th>Version</th><th>Status</th><th>Activated</th><th>Deactivated</th><th>Action</th></tr>
+    {% for v in r.versions %}
+    <tr>
+      <td>v{{ v.version }}</td>
+      <td>{{ v.status }}</td>
+      <td class="text-xs text-gray-500">{{ v.activated_at or '—' }}</td>
+      <td class="text-xs text-gray-500">{{ v.deactivated_at or '—' }}</td>
+      <td>
+        {% if v.status=='active' and v.version > 1 %}
+        <form method="post" action="/api/polymarket/actions/rollback-rule/{{ v.version }}"
+              onsubmit="return confirm('Roll back rule v{{ v.version }} to its parent?');">
+          <button class="badge bg-red-800 text-white">rollback</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card p-4">
+  <div class="text-sm font-semibold mb-2">Change history (before → after, evidence, outcome)</div>
+  <table>
+    <tr><th>v</th><th>Family</th><th>Path</th><th>Before</th><th>After</th><th>Outcome</th><th>At</th></tr>
+    {% for c in r.changes %}
+    <tr>
+      <td>v{{ c.rule_version if c.rule_version is not none else '—' }}</td>
+      <td>{{ c.parameter_family }}</td>
+      <td class="text-xs">{{ c.parameter_path or '—' }}</td>
+      <td class="font-mono text-xs">{{ c.old_value }}</td>
+      <td class="font-mono text-xs">{{ c.new_value }}</td>
+      <td>{{ c.outcome_status or 'pending' }}</td>
+      <td class="text-xs text-gray-500">{{ c.created_at }}</td>
+    </tr>
+    {% else %}<tr><td colspan="7" class="text-gray-600">No rule changes yet.</td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

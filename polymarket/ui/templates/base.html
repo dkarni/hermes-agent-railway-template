@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Polymarket Research{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' }</script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    body { background:#0b0f19; color:#e5e7eb; }
+    .card { background:#111827; border:1px solid #1f2937; border-radius:0.75rem; }
+    a { color:#93c5fd; }
+    table { width:100%; border-collapse:collapse; }
+    th,td { padding:0.5rem 0.6rem; text-align:left; border-bottom:1px solid #1f2937; font-size:0.85rem; }
+    th { color:#9ca3af; font-weight:600; }
+    details summary { cursor:pointer; color:#93c5fd; }
+    .badge { display:inline-block; padding:0.15rem 0.5rem; border-radius:0.5rem; font-size:0.7rem; font-weight:700; }
+  </style>
+</head>
+<body class="min-h-screen">
+  <header class="border-b border-gray-800 bg-[#0d1220]">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
+      <span class="badge bg-amber-500 text-black">📄 PAPER TRADING ONLY</span>
+      <span class="text-sm text-gray-400">Active rule <b class="text-gray-200">v{{ active_rule_version if active_rule_version is not none else '—' }}</b></span>
+      <span class="text-xs text-gray-500">
+        monitor: {{ freshness.last_monitor_success_at or 'never' }} ·
+        pnl: {{ freshness.last_pnl_success_at or 'never' }} ·
+        scan: {{ freshness.last_leaderboard_scan_success_at or 'never' }}
+      </span>
+      <nav class="ml-auto flex flex-wrap gap-3 text-sm">
+        {% set navitems = [
+          ('overview','/polymarket','Overview'),
+          ('wallets','/polymarket/wallets','Wallets'),
+          ('signals','/polymarket/signals','Signals'),
+          ('paper-trades','/polymarket/paper-trades','Paper'),
+          ('journal','/polymarket/journal','Journal'),
+          ('performance','/polymarket/performance','Performance'),
+          ('rules','/polymarket/rules','Rules'),
+          ('reports','/polymarket/reports','Reports'),
+          ('health','/polymarket/health','Health')
+        ] %}
+        {% for key,href,label in navitems %}
+          <a href="{{ href }}" class="{{ 'text-white font-semibold underline' if active_nav==key else 'text-gray-400' }}">{{ label }}</a>
+        {% endfor %}
+      </nav>
+    </div>
+  </header>
+
+  {% if warnings %}
+  <div class="max-w-7xl mx-auto px-4 mt-3">
+    {% for w in warnings %}
+    <div class="card border-amber-600/50 bg-amber-950/40 text-amber-200 px-4 py-2 mb-2 text-sm">⚠ {{ w }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <main class="max-w-7xl mx-auto px-4 py-5">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="max-w-7xl mx-auto px-4 py-6 text-xs text-gray-600">
+    Paper-trading research only. No orders are ever placed. All money labelled paper vs source PnL.
+  </footer>
+</body>
+</html>
