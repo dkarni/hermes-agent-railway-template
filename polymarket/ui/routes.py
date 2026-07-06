@@ -15,7 +15,8 @@ import os
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from starlette.requests import Request
 from starlette.responses import HTMLResponse
-from starlette.routing import Route
+from starlette.routing import Mount, Route
+from starlette.staticfiles import StaticFiles
 
 from .. import queries
 
@@ -173,4 +174,5 @@ def ui_routes(conn, config) -> list[Route]:
         Route("/polymarket/rules", p("rules.html", "rules", _rules)),
         Route("/polymarket/reports", p("reports.html", "reports", _reports)),
         Route("/polymarket/health", p("health.html", "health", _health)),
+        Mount("/polymarket/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="poly-static"),
     ]
