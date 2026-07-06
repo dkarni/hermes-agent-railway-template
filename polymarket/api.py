@@ -35,6 +35,26 @@ def _csv_response(items: list[dict], filename: str) -> Response:
     )
 
 
+def _calibration_csv_rows(result: dict) -> list[dict]:
+    """One row per component x band; component-level stats repeated per row."""
+    rows: list[dict] = []
+    for comp in result.get("components", []):
+        for band in comp.get("bands", []):
+            rows.append({
+                "component": comp["component"],
+                "band": band["band"],
+                "n": band["n"],
+                "bad_rate": band["bad_rate"],
+                "avg_pnl_usd": band["avg_pnl_usd"],
+                "auc": comp["auc"],
+                "n_good": comp["n_good"],
+                "n_bad": comp["n_bad"],
+                "separation": comp["separation"],
+                "sufficient": comp["sufficient"],
+            })
+    return rows
+
+
 def create_app(
     conn,
     config,
@@ -104,6 +124,13 @@ def create_app(
 
     async def performance(request: Request) -> JSONResponse:
         return JSONResponse(await queries.performance(conn, _params(request).get("window")))
+
+    async def performance_calibration(request: Request) -> Response:
+        params = _params(request)
+        result = await queries.calibration(conn, params.get("window"))
+        if params.get("format") == "csv":
+            return _csv_response(_calibration_csv_rows(result), "calibration")
+        return JSONResponse(result)
 
     async def performance_benchmarks(_request: Request) -> JSONResponse:
         return JSONResponse(await queries.benchmarks(conn))
@@ -207,6 +234,7 @@ def create_app(
         Route(f"{api}/paper-trades", paper_trades, methods=["GET"]),
         Route(f"{api}/paper-trades/{{id}}", paper_trade_detail, methods=["GET"]),
         Route(f"{api}/journal", journal, methods=["GET"]),
+        Route(f"{api}/performance/calibration", performance_calibration, methods=["GET"]),
         Route(f"{api}/performance/benchmarks", performance_benchmarks, methods=["GET"]),
         Route(f"{api}/performance", performance, methods=["GET"]),
         Route(f"{api}/rules/{{version}}", rule_version, methods=["GET"]),

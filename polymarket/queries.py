@@ -16,6 +16,7 @@ import aiosqlite
 from . import db as dbmod
 from . import serialize as ser
 from .domain import benchmarks as bm
+from .domain import calibration as cal
 
 ZERO = Decimal(0)
 
@@ -922,6 +923,85 @@ async def benchmarks(conn) -> dict:
     comparison = bm.compare(fm, blindm, min_sample=bm.min_benchmark_sample(payload))
     return {"filtered": _metrics_json(fm), "blind": _metrics_json(blindm),
             "comparison": _comparison_json(comparison)}
+
+
+# --- component calibration (PRD 20.8 companion) -----------------------------
+
+async def calibration(conn, window: str | None = None) -> dict:
+    """Which score components discriminate GOOD outcomes from BAD ones.
+
+    Joins final, learning-eligible, non-demo outcome reviews to their decisions,
+    reads each decision's component scores + realized-else-hypothetical PnL, and
+    runs the pure ``domain.calibration`` report. Returns a JSON-serializable dict
+    with per-component AUC, mean separation and score bands.
+    """
+    since = _window_since(window)
+    payload = await active_payload(conn)
+    min_sample = bm.min_benchmark_sample(payload)
+
+    where = [
+        "r.review_checkpoint = 'final'",
+        "r.eligible_for_learning = 1",
+        "r.is_demo = 0",
+        "dj.is_demo = 0",
+        "dj.component_scores_json IS NOT NULL",
+    ]
+    args: list = []
+    if since:
+        where.append("dj.created_at >= ?")
+        args.append(since)
+    where_sql = " AND ".join(where)
+
+    cur = await conn.execute(
+        f"SELECT dj.component_scores_json, dj.decision, r.decision_quality_label, "
+        f"COALESCE(r.actual_pnl, r.hypothetical_pnl) "
+        f"FROM outcome_reviews r JOIN decision_journal dj ON r.decision_journal_id = dj.id "
+        f"WHERE {where_sql}",
+        args,
+    )
+
+    records: list[cal.CalibrationRecord] = []
+    for scores_json, decision, label, pnl_micro in await cur.fetchall():
+        components = ser.load_json(scores_json)
+        if not isinstance(components, dict):
+            continue  # malformed / missing component scores -> skip the row
+        pnl = dbmod.micro_to_usd(int(pnl_micro)) if pnl_micro is not None else None
+        records.append(cal.CalibrationRecord(
+            components=components, label=label or "", decision=decision, pnl=pnl,
+        ))
+
+    results, summary = cal.component_calibration(records, min_sample=min_sample)
+    return {
+        "window": window or "all",
+        "min_sample": summary.min_sample,
+        "total_records": summary.total_records,
+        "label_counts": dict(summary.label_counts),
+        "components": [_calibration_json(c) for c in results.values()],
+    }
+
+
+def _calibration_json(c: cal.ComponentCalibration) -> dict:
+    return {
+        "component": c.component,
+        "n_good": c.n_good,
+        "n_bad": c.n_bad,
+        "auc": ser.dec(c.auc),
+        "mean_good": ser.dec(c.mean_good),
+        "mean_bad": ser.dec(c.mean_bad),
+        "separation": ser.dec(c.separation),
+        "sufficient": c.sufficient,
+        "bands": [
+            {
+                "band": f"[{b.lo},{b.hi}{']' if i == len(c.bands) - 1 else ')'}",
+                "lo": ser.dec(b.lo),
+                "hi": ser.dec(b.hi),
+                "n": b.n,
+                "bad_rate": ser.dec(b.bad_rate),
+                "avg_pnl_usd": ser.dec(b.avg_pnl),
+            }
+            for i, b in enumerate(c.bands)
+        ],
+    }
 
 
 # --- rules (PRD 20.9) -------------------------------------------------------
