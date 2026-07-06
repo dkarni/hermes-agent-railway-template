@@ -199,3 +199,35 @@ async def test_pagination_stops_at_lookback_and_dedupes():
     assert hashes.count("h2") == 1
     assert "h4" not in hashes
     assert set(hashes) == {"h1", "h2", "h3"}
+
+
+@pytest.mark.asyncio
+async def test_iter_user_trades_stops_at_offset_cap(fixtures):
+    """The public /trades endpoint 400s past offset ~3000; the adapter must
+    treat a 400 mid-pagination as the endpoint cap (PRD 8.3), not an error."""
+    page = fixtures("wallet_trades.json")
+
+    def handler(request):
+        offset = int(request.url.params.get("offset", "0"))
+        if offset > 0:
+            return httpx.Response(400, text="Bad Request")
+        return httpx.Response(200, json=page)
+
+    client = AllowlistClient(
+        frozenset({"data-api.polymarket.com"}),
+        transport=httpx.MockTransport(handler),
+    )
+    adapter = DataApiAdapter(client, "https://data-api.polymarket.com")
+    trades = await adapter.iter_user_trades("0xabc", page_size=len(page))
+    assert len(trades) > 0  # first page collected, cap swallowed
+
+
+@pytest.mark.asyncio
+async def test_iter_user_trades_first_page_400_still_raises(fixtures):
+    client = AllowlistClient(
+        frozenset({"data-api.polymarket.com"}),
+        transport=httpx.MockTransport(lambda r: httpx.Response(400, text="Bad Request")),
+    )
+    adapter = DataApiAdapter(client, "https://data-api.polymarket.com")
+    with pytest.raises(httpx.HTTPStatusError):
+        await adapter.iter_user_trades("0xabc")

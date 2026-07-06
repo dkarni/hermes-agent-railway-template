@@ -7,6 +7,8 @@ Endpoints (verified live 2026-07-06):
 
 from __future__ import annotations
 
+import httpx
+
 from typing import Awaitable, Callable
 
 from ..http import AllowlistClient
@@ -117,7 +119,16 @@ class DataApiAdapter:
         seen: set[tuple[str, str, str, int]] = set()
         offset = 0
         for _ in range(max_pages):
-            page = await self.get_user_trades(wallet, limit=page_size, offset=offset)
+            try:
+                page = await self.get_user_trades(wallet, limit=page_size, offset=offset)
+            except httpx.HTTPStatusError as exc:
+                # The public /trades endpoint rejects offsets past ~3000 with a
+                # 400. PRD 8.3: paginate until the window is complete OR the
+                # endpoint limit is reached - so a 400 mid-pagination is the
+                # cap, not an error. First-page 400s still raise.
+                if exc.response.status_code == 400 and offset > 0:
+                    break
+                raise
             if not page:
                 break
             stop = False

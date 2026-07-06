@@ -217,6 +217,8 @@ def create_app(
         Route(f"{api}/job-runs", job_runs, methods=["GET"]),
         # Actions.
         Route(f"{api}/actions/scan-leaderboard", _action_handler("scan-leaderboard"), methods=["POST"]),
+        Route(f"{api}/actions/ingest-history", _action_handler("ingest-history"), methods=["POST"]),
+        Route(f"{api}/actions/run-monitor", _action_handler("run-monitor"), methods=["POST"]),
         Route(f"{api}/actions/profile-wallets", _action_handler("profile-wallets"), methods=["POST"]),
         Route(f"{api}/actions/reconcile-trades", _action_handler("reconcile-trades"), methods=["POST"]),
         Route(f"{api}/actions/update-pnl", _action_handler("update-pnl"), methods=["POST"]),

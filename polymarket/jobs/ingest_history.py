@@ -44,20 +44,35 @@ async def run_ingest_history(
     condition_ids: set[str] = set()
     counts: dict[str, int] = {}
 
+    failed: set[str] = set()
+
     async def _one(wallet: str) -> None:
         async with sem:
-            trades = await dataapi.iter_user_trades(
-                wallet,
-                stop_predicate=lambda t: t.timestamp < lookback_cutoff,
-            )
-            ctx.read(len(trades))
-            n = await _store_trades(ctx, wallet, trades)
-            counts[wallet] = n
-            for t in trades:
-                if t.condition_id:
-                    condition_ids.add(t.condition_id)
+            try:
+                trades = await dataapi.iter_user_trades(
+                    wallet,
+                    stop_predicate=lambda t: t.timestamp < lookback_cutoff,
+                )
+                ctx.read(len(trades))
+                n = await _store_trades(ctx, wallet, trades)
+                counts[wallet] = n
+                for t in trades:
+                    if t.condition_id:
+                        condition_ids.add(t.condition_id)
+            except Exception as exc:  # noqa: BLE001 - one wallet must not kill the batch
+                failed.add(wallet)
+                await ctx.add_data_quality_event(
+                    severity="error",
+                    event_type="wallet_ingest_failed",
+                    source="dataapi",
+                    entity_type="wallet",
+                    entity_id=wallet,
+                    details={"type": type(exc).__name__, "message": str(exc)[:500]},
+                )
 
     await asyncio.gather(*[_one(w) for w in wallets])
+    # Failed wallets stay history_complete=0 and are retried on the next run.
+    wallets = [w for w in wallets if w not in failed]
 
     # Resolve involved markets (gamma handles batching internally).
     resolved_markets = 0
@@ -106,9 +121,10 @@ async def run_ingest_history(
     await ctx.conn.commit()
 
     return {
-        "pending_wallets": len(wallets),
+        "pending_wallets": len(wallets) + len(failed),
         "ingested_trades": sum(counts.values()),
         "resolved_markets": resolved_markets,
+        "failed_wallets": len(failed),
     }
 
 

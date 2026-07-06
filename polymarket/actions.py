@@ -23,6 +23,8 @@ from .jobs.runner import JobContext, _lock_for
 # Action name -> internal job_name (the lock key + job_runs.job_name).
 ACTION_JOBS: dict[str, str] = {
     "scan-leaderboard": "leaderboard_scan",
+    "ingest-history": "ingest_history",
+    "run-monitor": "monitor",
     "profile-wallets": "profile_wallets",
     "reconcile-trades": "reconcile",
     "update-pnl": "pnl",
@@ -77,6 +79,23 @@ def _coro_for(action: str, config: Config):
     if action == "profile-wallets":
         from .jobs.profile_wallets import run_profile_wallets
         return lambda ctx: run_profile_wallets(ctx, config)
+    if action == "ingest-history":
+        dataapi, gamma, _ = _build_adapters(config)
+        from .jobs.ingest_history import run_ingest_history
+        return lambda ctx: run_ingest_history(ctx, config, dataapi, gamma)
+    if action == "run-monitor":
+        dataapi, gamma, clob = _build_adapters(config)
+        from .jobs.monitor import run_monitor
+        from .jobs.paper_exec import paper_copy_callback
+        from .jobs.portfolio_view import load_portfolio_view
+
+        async def _monitor(ctx):
+            portfolio = await load_portfolio_view(ctx.conn)
+            return await run_monitor(
+                ctx, config, dataapi, gamma, clob,
+                portfolio=portfolio, on_paper_copy=paper_copy_callback,
+            )
+        return _monitor
     if action == "reconcile-trades":
         dataapi, gamma, clob = _build_adapters(config)
         from .jobs.portfolio_view import load_portfolio_view
