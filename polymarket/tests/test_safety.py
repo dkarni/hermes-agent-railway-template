@@ -83,6 +83,5 @@ def test_allowlist_contains_only_expected_hosts(tmp_path):
             "gamma-api.polymarket.com",
             "data-api.polymarket.com",
             "clob.polymarket.com",
-            "api.telegram.org",
         }
     )

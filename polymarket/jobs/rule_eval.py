@@ -302,10 +302,33 @@ async def _activate_change(
     return new_id
 
 
+async def _days_since_first_portfolio(conn) -> int | None:
+    cur = await conn.execute("SELECT MIN(started_at) FROM paper_portfolios")
+    row = await cur.fetchone()
+    if row is None or row[0] is None:
+        return None
+    from datetime import datetime, timezone
+
+    started = datetime.fromisoformat(str(row[0]).replace("Z", "+00:00"))
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - started).days
+
+
 async def run_rule_eval(ctx: JobContext, config: Config, *, strategy: str = "default") -> dict:
     conn = ctx.conn
     if not config.rule_update_enabled:
         return {"status": "disabled", "reason": "RULE_UPDATE_ENABLED=false"}
+
+    # Burn-in gate (PRD phase 7): no automatic rule changes until the paper
+    # system has run for RULE_UPDATE_MIN_DAYS. The sample-size gates alone
+    # could be satisfied within days by a burst of judged decisions.
+    days = await _days_since_first_portfolio(conn)
+    if days is not None and days < config.rule_update_min_days:
+        return {
+            "status": "skipped",
+            "reason": f"burn_in: day {days} of {config.rule_update_min_days} minimum",
+        }
 
     active = await _active_rule_set(conn, strategy)
     if active is None:

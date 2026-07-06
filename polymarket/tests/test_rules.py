@@ -160,3 +160,46 @@ def test_checksum_stable_and_changes():
     p2 = _payload()
     p2["version"] = 999
     assert rules.checksum(p) != rules.checksum(p2)
+
+
+class TestBurnInGate:
+    """RULE_UPDATE_MIN_DAYS blocks automatic rule changes during burn-in."""
+
+    async def _run(self, tmp_path, portfolio_age_days, min_days):
+        import pytest  # noqa: F401
+        from decimal import Decimal
+        from ..config import load_config
+        from .. import db as dbmod
+        from ..jobs.portfolio_view import ensure_portfolio
+        from ..jobs.rule_eval import run_rule_eval
+        from ..jobs.runner import JobContext
+
+        config = load_config({
+            "TRADING_MODE": "paper", "POLY_DATA_DIR": str(tmp_path),
+            "RULE_UPDATE_MIN_DAYS": str(min_days),
+        })
+        conn = await dbmod.init_db(str(tmp_path / "burnin.db"), config.migrations_dir)
+        try:
+            await ensure_portfolio(conn, starting_bankroll=Decimal("1000"))
+            await conn.execute(
+                "UPDATE paper_portfolios SET started_at = datetime('now', ?)",
+                (f"-{portfolio_age_days} days",),
+            )
+            await conn.commit()
+            ctx = JobContext(conn, job_run_id=1, job_name="rule_eval")
+            return await run_rule_eval(ctx, config)
+        finally:
+            await conn.close()
+
+    import pytest as _pytest
+
+    @_pytest.mark.asyncio
+    async def test_blocked_during_burn_in(self, tmp_path):
+        result = await self._run(tmp_path, portfolio_age_days=1, min_days=7)
+        assert result["status"] == "skipped"
+        assert result["reason"].startswith("burn_in")
+
+    @_pytest.mark.asyncio
+    async def test_allowed_after_burn_in(self, tmp_path):
+        result = await self._run(tmp_path, portfolio_age_days=8, min_days=7)
+        assert not (result["status"] == "skipped" and result["reason"].startswith("burn_in"))

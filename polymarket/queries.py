@@ -312,7 +312,9 @@ async def wallets(conn, params) -> dict:
 
     if sort_key == "paper_pnl":
         # Rank by copied paper-PnL contribution (computed, not a DB column).
-        list_sql = f"SELECT wp.* FROM wallet_profiles wp {join} WHERE {where_sql}"
+        # ORDER BY score first: the python pnl sort is stable, so equal-pnl
+        # wallets (e.g. all zero during early burn-in) fall back to score rank.
+        list_sql = f"SELECT wp.* FROM wallet_profiles wp {join} WHERE {where_sql} ORDER BY wp.global_score DESC NULLS LAST"
         cur = await conn.execute(list_sql, args)
         all_rows = [dict(r) for r in await cur.fetchall()]
 

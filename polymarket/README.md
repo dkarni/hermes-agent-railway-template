@@ -71,6 +71,7 @@ start). Defaults let the worker boot with zero Railway changes.
 | `TRACKED_WALLET_POLL_SECONDS` | `60` | Monitor cadence. |
 | `PAPER_STARTING_BANKROLL` | `1000` | USD. |
 | `RULE_UPDATE_ENABLED` | `true` | Disable to freeze rules. |
+| `RULE_UPDATE_MIN_DAYS` | `7` | Burn-in: no automatic rule changes before this many days of paper operation. |
 | `REPORT_TIMEZONE` | `Europe/Madrid` | |
 | `DAILY_REPORT_TIME` | `21:00` | Local cutoff. |
 | `DEMO_MODE` | `false` | Demo rows excluded from metrics. |

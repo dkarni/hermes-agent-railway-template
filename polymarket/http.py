@@ -1,7 +1,7 @@
 """Shared async HTTP client: host allowlist, per-host rate limiting, retries.
 
 Safety boundary (DESIGN.md sec 4): only the configured Polymarket hosts plus
-api.telegram.org may be reached. Any other host raises DisallowedHostError.
+may be reached. Any other host raises DisallowedHostError.
 """
 
 from __future__ import annotations

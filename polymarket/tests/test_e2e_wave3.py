@@ -109,7 +109,8 @@ async def _seed_track_wallet(conn):
 
 @pytest.mark.asyncio
 async def test_e2e_wave3_full_lifecycle(tmp_path):
-    config = load_config({"POLY_DATA_DIR": str(tmp_path), "TRADING_MODE": "paper"})
+    config = load_config({"POLY_DATA_DIR": str(tmp_path), "TRADING_MODE": "paper",
+                          "RULE_UPDATE_MIN_DAYS": "0"})  # e2e portfolio starts "today"; burn-in gate has its own test
     conn = await dbmod.init_db(str(tmp_path / "poly.db"), config.migrations_dir)
     await ensure_portfolio(conn, starting_bankroll=Decimal("1000"))
     await _seed_track_wallet(conn)

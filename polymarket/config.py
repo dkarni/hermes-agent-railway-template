@@ -71,7 +71,6 @@ class Config:
     gamma_base_url: str
     data_base_url: str
     clob_base_url: str
-    telegram_base_url: str
 
     leaderboard_wallet_limit: int
     leaderboard_categories: tuple[str, ...]
@@ -92,7 +91,7 @@ class Config:
     report_timezone: str
     daily_report_time: str
 
-    telegram_chat_id: str  # retained for config compatibility; unused (delivery is dashboard-only)
+    rule_update_min_days: int  # burn-in: no automatic rule changes before this many days of paper operation
     demo_mode: bool
     log_level: str
 
@@ -116,7 +115,6 @@ class Config:
                 _get_host(self.gamma_base_url),
                 _get_host(self.data_base_url),
                 _get_host(self.clob_base_url),
-                _get_host(self.telegram_base_url),
             }
         )
 
@@ -155,7 +153,6 @@ def load_config(env: dict[str, str] | None = None) -> Config:
         gamma_base_url=_get(env, "POLYMARKET_GAMMA_BASE_URL", "https://gamma-api.polymarket.com").rstrip("/"),
         data_base_url=_get(env, "POLYMARKET_DATA_BASE_URL", "https://data-api.polymarket.com").rstrip("/"),
         clob_base_url=_get(env, "POLYMARKET_CLOB_BASE_URL", "https://clob.polymarket.com").rstrip("/"),
-        telegram_base_url=_get(env, "POLYMARKET_TELEGRAM_BASE_URL", "https://api.telegram.org").rstrip("/"),
         leaderboard_wallet_limit=_get_int(env, "LEADERBOARD_WALLET_LIMIT", 500, minimum=1),
         leaderboard_categories=categories,
         wallet_lookback_days=_get_int(env, "WALLET_LOOKBACK_DAYS", 30, minimum=1),
@@ -180,7 +177,7 @@ def load_config(env: dict[str, str] | None = None) -> Config:
         rule_update_enabled=_get_bool(env, "RULE_UPDATE_ENABLED", True),
         report_timezone=report_timezone,
         daily_report_time=daily_report_time,
-        telegram_chat_id=_get(env, "POLY_TELEGRAM_CHAT_ID", ""),
+        rule_update_min_days=_get_int(env, "RULE_UPDATE_MIN_DAYS", 7),
         demo_mode=_get_bool(env, "DEMO_MODE", False),
         log_level=_get(env, "LOG_LEVEL", "INFO").upper(),
         http_rate_limit_per_second=_get_decimal(

@@ -100,7 +100,7 @@ async def _overview(conn, config, request):
     series = await q.equity_sparkline(conn, pid)
     data["sparkline"] = _sparkline(series)
     top_wallets = (await queries.wallets(
-        conn, {"status": "track", "sort": "score", "limit": "10"}
+        conn, {"status": "track", "sort": "paper_pnl", "limit": "10"}
     ))["items"]
     data["top_wallets"] = top_wallets
     return {"o": data}
