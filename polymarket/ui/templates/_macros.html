@@ -2,7 +2,7 @@
   {% set limit = result.limit %}
   {% set offset = result.offset %}
   {% set total = result.total %}
-  <div class="flex items-center gap-3 text-sm text-gray-400 mt-3">
+  <div class="flex items-center gap-3 text-sm mt-3" style="color:var(--muted);">
     <span>{{ offset + 1 if total else 0 }}–{{ [offset + limit, total] | min }} of {{ total }}</span>
     {% set qs = [] %}
     {% for k,v in query.items() if k != 'offset' %}{% set _ = qs.append(k ~ '=' ~ v) %}{% endfor %}
@@ -26,7 +26,7 @@
 
 {% macro money(v, kind='paper') %}
   {% if v is none %}<span class="text-gray-600">—</span>
-  {% else %}<span class="font-mono">${{ v }}</span> <span class="text-[0.6rem] text-gray-500 uppercase">{{ kind }}</span>{% endif %}
+  {% else %}<span class="mono">{{ v | money_amount }}</span> <span class="text-[0.6rem] uppercase" style="color:var(--faint);">{{ kind }}</span>{% endif %}
 {% endmacro %}
 
 {% macro components(scores) %}

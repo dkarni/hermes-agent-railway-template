@@ -93,3 +93,26 @@ async def test_same_job_name_serialized(tmp_path):
         assert order[2].startswith("start-") and order[3].startswith("end-")
     finally:
         await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_zombie_runs_aborted_at_startup(tmp_path):
+    """job_runs left 'running' by a container restart are closed on boot."""
+    from .. import db as dbmod
+    from ..worker import _abort_zombie_runs
+
+    from ..config import load_config
+
+    config = load_config({"TRADING_MODE": "paper", "POLY_DATA_DIR": str(tmp_path)})
+    conn = await dbmod.init_db(str(tmp_path / "z.db"), config.migrations_dir)
+    await conn.execute(
+        "INSERT INTO job_runs (job_name, trigger_type, started_at, status, lock_key) "
+        "VALUES ('ingest_history', 'scheduled', '2026-07-06T00:00:00Z', 'running', 'ingest_history')"
+    )
+    await conn.commit()
+    n = await _abort_zombie_runs(conn)
+    assert n == 1
+    cur = await conn.execute("SELECT status, finished_at FROM job_runs")
+    status, finished = await cur.fetchone()
+    assert status == "aborted" and finished is not None
+    await conn.close()

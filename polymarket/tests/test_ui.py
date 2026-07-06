@@ -41,8 +41,8 @@ async def test_page_renders(tmp_path, path, marker):
             resp = client.get(path)
             assert resp.status_code == 200, (path, resp.text[:400])
             assert resp.headers["content-type"].startswith("text/html")
-            assert "PAPER TRADING ONLY" in resp.text  # global badge on every page
-            assert marker in resp.text, path
+            assert "paper trading only" in resp.text.lower()  # global badge on every page
+            assert marker.lower() in resp.text.lower(), path
     finally:
         await conn.close()
 

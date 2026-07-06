@@ -11,8 +11,12 @@ version, data-freshness line, nav) via the shared context in _base_context.
 from __future__ import annotations
 
 import os
+import re
+from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
+from zoneinfo import ZoneInfo
 
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader, pass_context, select_autoescape
 from starlette.requests import Request
 from starlette.responses import HTMLResponse
 from starlette.routing import Mount, Route
@@ -28,24 +32,142 @@ _env = Environment(
 )
 
 
+_EXTRA_FRACTION_RE = re.compile(r"\.(\d{6})\d+(?=(?:Z|[+-]\d\d:?\d\d)?$)")
+
+
+def _parse_time(value) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        raw = str(value).strip()
+        if not raw or raw in {"—", "never", "none", "None"}:
+            return None
+        raw = _EXTRA_FRACTION_RE.sub(r".\1", raw)
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        try:
+            dt = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _display_tz(context) -> ZoneInfo:
+    tz = context.get("display_tz")
+    if isinstance(tz, ZoneInfo):
+        return tz
+    try:
+        return ZoneInfo(str(tz))
+    except Exception:
+        return ZoneInfo("UTC")
+
+
+def _format_delta(seconds: int) -> str:
+    if seconds < 45:
+        return "just now"
+    if seconds < 3600:
+        minutes = max(1, round(seconds / 60))
+        return f"{minutes} min ago"
+    if seconds < 86400:
+        hours = max(1, round(seconds / 3600))
+        return f"{hours} hr ago"
+    days = max(1, round(seconds / 86400))
+    return f"{days} days ago"
+
+
+@pass_context
+def _relative_time(context, value, label: str | None = None, empty: str = "never") -> str:
+    dt = _parse_time(value)
+    if dt is None:
+        text = empty
+    else:
+        now = datetime.now(timezone.utc)
+        delta = int((now - dt).total_seconds())
+        if delta >= 0 and delta < 7 * 86400:
+            text = _format_delta(delta)
+        else:
+            local = dt.astimezone(_display_tz(context))
+            text = local.strftime("%b %-d, %H:%M")
+    return f"{label} {text}" if label else text
+
+
+@pass_context
+def _calendar_time(context, value, empty: str = "never") -> str:
+    dt = _parse_time(value)
+    if dt is None:
+        return empty
+    tz = _display_tz(context)
+    local = dt.astimezone(tz)
+    today = datetime.now(timezone.utc).astimezone(tz).date()
+    if local.date() == today:
+        return local.strftime("Today, %H:%M")
+    if local.date().toordinal() == today.toordinal() - 1:
+        return local.strftime("Yesterday, %H:%M")
+    return local.strftime("%b %-d, %H:%M")
+
+
+def _money_amount(value, empty: str = "—") -> str:
+    if value is None:
+        return empty
+    try:
+        amount = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return str(value)
+    return f"${amount:,.2f}"
+
+
+_env.filters["relative_time"] = _relative_time
+_env.filters["calendar_time"] = _calendar_time
+_env.filters["money_amount"] = _money_amount
+
+
 def _sparkline(series: list[dict], *, width=520, height=60) -> dict:
     """Build inline-SVG sparkline geometry from an equity series (no chart lib)."""
-    from decimal import Decimal
-
     points = [s for s in series if s.get("equity_usd") is not None]
     if len(points) < 2:
         return {"path": "", "width": width, "height": height, "empty": True}
     values = [Decimal(p["equity_usd"]) for p in points]
     lo, hi = min(values), max(values)
-    span = (hi - lo) or Decimal(1)
+    span = hi - lo
     n = len(values)
-    coords = []
+    pad = Decimal(8)
+    drawable_height = Decimal(height) - (pad * 2)
+    coords: list[tuple[float, float]] = []
     for i, v in enumerate(values):
         x = (Decimal(i) / Decimal(n - 1)) * Decimal(width)
-        y = Decimal(height) - ((v - lo) / span) * Decimal(height)
-        coords.append(f"{float(x):.1f},{float(y):.1f}")
-    path = "M " + " L ".join(coords)
-    return {"path": path, "width": width, "height": height, "empty": False,
+        if span == 0:
+            y = Decimal(height) / Decimal(2)
+        else:
+            y = pad + (Decimal(1) - ((v - lo) / span)) * drawable_height
+        coords.append((float(x), float(y)))
+
+    def pt(i: int) -> tuple[float, float]:
+        return coords[min(max(i, 0), len(coords) - 1)]
+
+    path = f"M {coords[0][0]:.1f},{coords[0][1]:.1f}"
+    for i in range(len(coords) - 1):
+        x0, y0 = pt(i - 1)
+        x1, y1 = pt(i)
+        x2, y2 = pt(i + 1)
+        x3, y3 = pt(i + 2)
+        c1x = x1 + (x2 - x0) / 6
+        c1y = y1 + (y2 - y0) / 6
+        c2x = x2 - (x3 - x1) / 6
+        c2y = y2 - (y3 - y1) / 6
+        path += f" C {c1x:.1f},{c1y:.1f} {c2x:.1f},{c2y:.1f} {x2:.1f},{y2:.1f}"
+
+    baseline = height - 1
+    area_path = (
+        f"M {coords[0][0]:.1f},{baseline:.1f} "
+        f"L {coords[0][0]:.1f},{coords[0][1]:.1f} "
+        f"{path[2:]} "
+        f"L {coords[-1][0]:.1f},{baseline:.1f} Z"
+    )
+    return {"path": path, "area_path": area_path, "width": width, "height": height, "empty": False,
             "first": str(values[0]), "last": str(values[-1])}
 
 
@@ -66,6 +188,7 @@ async def _base_context(conn, config, request: Request, active: str) -> dict:
         "active_nav": active,
         "active_rule_version": version,
         "freshness": freshness,
+        "display_tz": config.report_tz,
         "warnings": warnings,
         "query": dict(request.query_params),
         "path": request.url.path,

@@ -162,10 +162,36 @@ async def init_scheduler(conn, config: Config) -> Scheduler:
     return scheduler
 
 
+async def _abort_zombie_runs(conn) -> int:
+    """Close job_runs left 'running' by a mid-run container restart.
+
+    The worker is the only writer, so any 'running' row at startup is a dead
+    run. Left alone it would wedge the manual-action 409 guard ("already
+    running") forever and lie on the health page.
+    """
+    cur = await conn.execute(
+        """
+        UPDATE job_runs
+           SET status = 'aborted', finished_at = ?,
+               error_json = json_object('type', 'Aborted',
+                                        'message', 'worker restarted mid-run')
+         WHERE status = 'running'
+        """,
+        (dbmod.utcnow_iso(),),
+    )
+    await conn.commit()
+    return cur.rowcount
+
+
 async def _startup(config: Config):
     from .jobs.portfolio_view import ensure_portfolio
 
     conn = await dbmod.init_db(config.db_path, config.migrations_dir)
+    aborted = await _abort_zombie_runs(conn)
+    if aborted:
+        logging.getLogger("polymarket.worker").warning(
+            "aborted %d zombie job run(s) from a previous container", aborted
+        )
     await ensure_portfolio(conn, starting_bankroll=config.paper_starting_bankroll)
     scheduler = await init_scheduler(conn, config)
     return conn, scheduler

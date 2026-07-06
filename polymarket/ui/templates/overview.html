@@ -3,57 +3,84 @@
 {% block title %}Overview — Polymarket Research{% endblock %}
 {% block content %}
 <div x-data="{}" x-init="setInterval(async () => {
+      const moneyText = (v) => (v === null || v === undefined || v === '') ? '—' :
+        new Intl.NumberFormat('en-US', { style:'currency', currency:'USD' }).format(Number(v));
       try { const r = await fetch('/api/polymarket/overview'); if(r.ok){ const d = await r.json();
-        document.getElementById('ov-equity').textContent = d.equity_usd ? '$'+d.equity_usd : '—';
-        document.getElementById('ov-today').textContent = d.today_pnl_usd ? '$'+d.today_pnl_usd : '—'; } }
+        document.getElementById('ov-equity').textContent = moneyText(d.equity_usd);
+        document.getElementById('ov-today').textContent = moneyText(d.today_pnl_usd); } }
       catch(e){}
     }, 60000)">
 
-  <h1 class="text-xl font-bold mb-1">Am I profitable on paper?</h1>
+  <div class="mb-5">
+    <div class="text-xs uppercase tracking-normal font-semibold" style="color:var(--cyan);">Overview</div>
+    <h1 class="text-2xl font-semibold mt-1">Am I profitable on paper?</h1>
+  </div>
 
   <!-- HEADLINE: filtered paper PnL vs blind copy (with sample caveat). -->
-  <div class="card p-5 mb-4 border-2 {{ 'border-green-700' if o.comparison.verdict=='filtered_better' else ('border-red-800' if o.comparison.verdict=='blind_better' else 'border-gray-700') }}">
-    <div class="flex items-center justify-between mb-2">
-      <div class="text-sm text-gray-400 uppercase tracking-wide">Filtered paper PnL vs blind copy</div>
-      <div class="badge {{ 'bg-green-700' if o.comparison.verdict=='filtered_better' else ('bg-red-800' if o.comparison.verdict=='blind_better' else 'bg-gray-700') }}">{{ o.comparison.verdict }}</div>
+  <div class="card p-6 mb-4">
+    <div class="flex flex-wrap items-start justify-between gap-4 mb-4">
+      <div>
+        <div class="text-xs uppercase font-semibold tracking-normal" style="color:var(--muted);">Filtered paper PnL vs blind copy</div>
+        <div class="text-4xl font-semibold mono mt-3">{{ o.comparison.filtered_minus_blind_pnl_usd | money_amount }}</div>
+      </div>
+      <div class="badge">{{ o.comparison.verdict | replace('_', ' ') }}</div>
     </div>
-    <div class="text-4xl font-bold font-mono mb-1">{{ money(o.comparison.filtered_minus_blind_pnl_usd) }}</div>
-    <div class="text-sm text-gray-400">
-      filtered {{ money(o.comparison.filtered.net_pnl_usd) }} (n={{ o.comparison.filtered.sample }})
-      vs blind {{ money(o.comparison.blind.net_pnl_usd,'blind') }} (n={{ o.comparison.blind.sample }})
+    <div class="text-sm" style="color:var(--muted);">
+      filtered {{ money(o.comparison.filtered.net_pnl_usd) }} <span class="mono">(n={{ o.comparison.filtered.sample }})</span>
+      <span class="mx-2" style="color:var(--border);">/</span>
+      blind {{ money(o.comparison.blind.net_pnl_usd,'blind') }} <span class="mono">(n={{ o.comparison.blind.sample }})</span>
     </div>
-    {% if o.comparison.caveat %}<div class="text-xs text-amber-300 mt-2">⚠ {{ o.comparison.caveat }}</div>{% endif %}
+    {% if o.comparison.caveat %}
+    <div class="text-xs mt-4 flex items-start gap-2" style="color:#b7f4ff;">
+      <svg class="icon mt-0.5" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 4.3 2.9 17a2 2 0 0 0 1.7 3h14.8a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z"/></svg>
+      <span>{{ o.comparison.caveat }}</span>
+    </div>
+    {% endif %}
   </div>
 
   <!-- Secondary line: ROI, drawdown, equity, cash, open, closed PnL, freshness. -->
   <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-5">
-    <div class="card p-3"><div class="text-xs text-gray-500">ROI (filtered)</div><div class="text-lg font-bold font-mono">{{ o.comparison.filtered.roi or '—' }}</div></div>
-    <div class="card p-3"><div class="text-xs text-gray-500">Max drawdown</div><div class="text-lg font-bold font-mono">{{ ('$' ~ o.max_drawdown_usd) if o.max_drawdown_usd is not none else '—' }}</div></div>
-    <div class="card p-3"><div class="text-xs text-gray-500">Equity</div><div id="ov-equity" class="text-lg font-bold font-mono">{{ ('$' ~ o.equity_usd) if o.equity_usd else '—' }}</div></div>
-    <div class="card p-3"><div class="text-xs text-gray-500">Cash</div><div class="text-lg font-bold font-mono">{{ ('$' ~ o.cash_usd) if o.cash_usd else '—' }}</div></div>
-    <div class="card p-3"><div class="text-xs text-gray-500">Open positions</div><div class="text-lg font-bold font-mono">{{ o.open_positions }}</div></div>
-    <div class="card p-3"><div class="text-xs text-gray-500">Closed PnL (paper)</div><div class="text-lg font-bold font-mono">{{ ('$' ~ o.total_pnl_usd) if o.total_pnl_usd is not none else '—' }}</div><div class="text-[0.6rem] text-gray-500">today <span id="ov-today">{{ ('$' ~ o.today_pnl_usd) if o.today_pnl_usd is not none else '—' }}</span></div></div>
-    <div class="card p-3"><div class="text-xs text-gray-500">Last fresh data</div><div class="text-xs font-mono mt-1">{{ o.data_freshness.last_pnl_success_at or o.data_freshness.last_monitor_success_at or 'never' }}</div></div>
+    <div class="metric-card p-3"><div class="text-xs muted">ROI (filtered)</div><div class="text-lg font-semibold mono mt-1">{{ o.comparison.filtered.roi or '—' }}</div></div>
+    <div class="metric-card p-3"><div class="text-xs muted">Max drawdown</div><div class="text-lg font-semibold mono mt-1">{{ o.max_drawdown_usd | money_amount if o.max_drawdown_usd is not none else '—' }}</div></div>
+    <div class="metric-card p-3"><div class="text-xs muted">Equity</div><div id="ov-equity" class="text-lg font-semibold mono mt-1">{{ o.equity_usd | money_amount if o.equity_usd else '—' }}</div></div>
+    <div class="metric-card p-3"><div class="text-xs muted">Cash</div><div class="text-lg font-semibold mono mt-1">{{ o.cash_usd | money_amount if o.cash_usd else '—' }}</div></div>
+    <div class="metric-card p-3"><div class="text-xs muted">Open positions</div><div class="text-lg font-semibold mono mt-1">{{ o.open_positions }}</div></div>
+    <div class="metric-card p-3"><div class="text-xs muted">Closed PnL (paper)</div><div class="text-lg font-semibold mono mt-1">{{ o.total_pnl_usd | money_amount if o.total_pnl_usd is not none else '—' }}</div><div class="text-[0.65rem] mt-1" style="color:var(--faint);">today <span id="ov-today" class="mono">{{ o.today_pnl_usd | money_amount if o.today_pnl_usd is not none else '—' }}</span></div></div>
+    <div class="metric-card p-3"><div class="text-xs muted">Last fresh data</div><div class="text-xs mt-1">{{ (o.data_freshness.last_pnl_success_at or o.data_freshness.last_monitor_success_at) | calendar_time }}</div></div>
   </div>
 
   <div class="grid md:grid-cols-3 gap-4">
     <div class="card p-4 md:col-span-2">
-      <div class="text-sm font-semibold mb-2">Paper equity</div>
+      <div class="text-sm font-semibold mb-4">Paper equity</div>
       {% if o.sparkline.empty %}
         <div class="text-xs text-gray-500">No pnl snapshots yet.</div>
       {% else %}
-        <svg viewBox="0 0 {{ o.sparkline.width }} {{ o.sparkline.height }}" width="100%" height="70" preserveAspectRatio="none">
-          <path d="{{ o.sparkline.path }}" fill="none" stroke="#34d399" stroke-width="2"/>
+        <svg viewBox="0 0 {{ o.sparkline.width }} {{ o.sparkline.height }}" width="100%" height="112" preserveAspectRatio="none" role="img" aria-label="Paper equity curve">
+          <defs>
+            <linearGradient id="overviewEquityFill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="#63e6ff" stop-opacity="0.22"/>
+              <stop offset="100%" stop-color="#63e6ff" stop-opacity="0"/>
+            </linearGradient>
+            <filter id="overviewEquityGlow" x="-10%" y="-40%" width="120%" height="180%">
+              <feGaussianBlur stdDeviation="2.4" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <path d="{{ o.sparkline.area_path }}" fill="url(#overviewEquityFill)"/>
+          <path d="{{ o.sparkline.path }}" fill="none" stroke="#63e6ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" filter="url(#overviewEquityGlow)"/>
         </svg>
-        <div class="text-xs text-gray-500">from ${{ o.sparkline.first }} to ${{ o.sparkline.last }}</div>
+        <div class="text-xs" style="color:var(--faint);">from {{ o.sparkline.first | money_amount }} to {{ o.sparkline.last | money_amount }}</div>
       {% endif %}
     </div>
     <div class="card p-4">
       <div class="text-sm font-semibold mb-2">What Hermes learned today</div>
       <div class="text-sm text-gray-300 mb-2">{{ o.top_lesson or 'No lesson recorded yet.' }}</div>
-      <div class="text-xs text-gray-500 mt-2 mb-1">Alerts</div>
+      <div class="text-xs mt-3 mb-1" style="color:var(--muted);">Alerts</div>
       {% for a in o.alerts[:3] %}
-        <div class="text-xs text-amber-300">{{ a.severity }}: {{ a.message }}</div>
+        <div class="text-xs flex items-start gap-2" style="color:#b7f4ff;">
+          <svg class="icon mt-0.5" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 4.3 2.9 17a2 2 0 0 0 1.7 3h14.8a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z"/></svg>
+          <span>{{ a.severity }}: {{ a.message }}</span>
+        </div>
       {% else %}<div class="text-xs text-gray-600">none</div>{% endfor %}
     </div>
   </div>
@@ -64,10 +91,10 @@
       <tr><th>When</th><th>What</th><th>From → to</th><th>Context</th></tr>
       {% for e in o.changes_feed %}
       <tr>
-        <td class="text-xs text-gray-500">{{ e.at }}</td>
+        <td class="text-xs" style="color:var(--muted);">{{ e.at | calendar_time }}</td>
         {% if e.kind == 'rule_change' %}
           <td>rule v{{ e.rule_version if e.rule_version is not none else '—' }} · {{ e.parameter_family }}</td>
-          <td class="font-mono text-xs">{{ e.old_value }} → {{ e.new_value }}</td>
+          <td class="mono text-xs">{{ e.old_value }} → {{ e.new_value }}</td>
           <td class="text-xs">{{ e.outcome_status or 'pending' }}</td>
         {% else %}
           <td>wallet <a href="/polymarket/wallets/{{ e.wallet_address }}">{{ e.wallet_address[:10] }}</a></td>
@@ -93,7 +120,7 @@
         <td class="font-mono">{{ w.global_score }} {{ components(w.score_components) }}</td>
         <td>{{ w.status }}</td>
         <td>{{ w.best_category or '—' }}</td>
-        <td class="text-xs text-gray-500">{{ w.last_signal_at or '—' }}</td>
+        <td class="text-xs" style="color:var(--muted);">{{ w.last_signal_at | relative_time(empty='—') }}</td>
       </tr>
       {% else %}<tr><td colspan="9" class="text-gray-600">No tracked wallets yet.</td></tr>{% endfor %}
     </table>
