@@ -84,7 +84,9 @@ def _coro_for(action: str, config: Config):
     if action == "ingest-history":
         dataapi, gamma, _ = _build_adapters(config)
         from .jobs.ingest_history import run_ingest_history
-        return lambda ctx: run_ingest_history(ctx, config, dataapi, gamma)
+        return lambda ctx: run_ingest_history(
+            ctx, config, dataapi, gamma, limit_wallets=config.tracked_wallet_limit
+        )
     if action == "run-monitor":
         dataapi, gamma, clob = _build_adapters(config)
         from .jobs.monitor import run_monitor

@@ -71,7 +71,9 @@ def build_scheduler(conn, config: Config, *, client=None) -> Scheduler:
     )
     scheduler.register(
         "ingest_history",
-        lambda ctx: run_ingest_history(ctx, config, dataapi, gamma),
+        lambda ctx: run_ingest_history(
+            ctx, config, dataapi, gamma, limit_wallets=config.tracked_wallet_limit
+        ),
         every_seconds=600, stagger_seconds=15, jitter_seconds=10,
     )
     scheduler.register(
