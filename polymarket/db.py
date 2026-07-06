@@ -264,8 +264,14 @@ async def init_db(db_path: str, migrations_dir: str) -> aiosqlite.Connection:
     return conn
 
 
+def _json_default(value: object) -> object:
+    if isinstance(value, Decimal):
+        return str(value)
+    raise TypeError(f"Object of type {value.__class__.__name__} is not JSON serializable")
+
+
 def json_dumps(value: object) -> str:
-    return json.dumps(value, separators=(",", ":"), sort_keys=True)
+    return json.dumps(value, default=_json_default, separators=(",", ":"), sort_keys=True)
 
 
 def json_or_none(value: object) -> str | None:
