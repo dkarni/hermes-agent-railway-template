@@ -45,6 +45,9 @@ def _next_due(status: str) -> str:
     return due.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
 
 
+PROFILE_BATCH_LIMIT = 300  # per run; scheduler re-runs every 30 min
+
+
 async def run_profile_wallets(
     ctx: JobContext, config: Config, *, force_all: bool = False
 ) -> dict:
@@ -56,18 +59,26 @@ async def run_profile_wallets(
     ranked: list[scoring.RankedWallet] = []
     computed: dict[str, tuple[WalletStats, scoring.WalletScore]] = {}
 
+    import asyncio
+
     for wallet in wallets:
         trades, resolved, complete = await _load_history(ctx.conn, wallet, config)
         ctx.read(len(trades))
-        stats = compute_wallet_stats(
+        # Stats/scoring are pure CPU; off the event loop or a full-universe
+        # profile run starves the scheduler (monitor/API froze for 18+ min in
+        # production on 2026-07-07).
+        stats = await asyncio.to_thread(
+            compute_wallet_stats,
             trades, resolved,
             window_days=config.wallet_lookback_days,
             window_end_ts=now_ts(),
         )
-        score = scoring.score_wallet(
+        from_partial = await _latest_scan_partial(ctx.conn, wallet)
+        score = await asyncio.to_thread(
+            scoring.score_wallet,
             stats, payload,
             history_complete=complete,
-            from_partial_scan=await _latest_scan_partial(ctx.conn, wallet),
+            from_partial_scan=from_partial,
             profile_stale=False,
         )
         computed[wallet] = (stats, score)
@@ -83,8 +94,24 @@ async def run_profile_wallets(
         await _persist_category_stats(ctx, wallet, stats, payload)
         ctx.written()
 
+    # Batched profiling: re-enforce the tracked cap globally, not just within
+    # this batch — keep the top-scored `track` wallets, demote the overflow.
+    await ctx.conn.execute(
+        """
+        UPDATE wallet_profiles
+           SET status = 'watch', status_reason_code = 'tracked_limit_overflow'
+         WHERE status = 'track' AND wallet_address NOT IN (
+               SELECT wallet_address FROM wallet_profiles
+                WHERE status = 'track'
+                ORDER BY global_score DESC
+                LIMIT ?
+           )
+        """,
+        (config.tracked_wallet_limit,),
+    )
     await ctx.conn.commit()
-    tracked = sum(1 for s in final_status.values() if s[0] == "track")
+    cur = await ctx.conn.execute("SELECT COUNT(*) FROM wallet_profiles WHERE status = 'track'")
+    tracked = int((await cur.fetchone())[0])
     return {"due_wallets": len(wallets), "scored": len(computed), "tracked": tracked}
 
 
@@ -110,8 +137,10 @@ async def _due_wallets(conn: aiosqlite.Connection, *, force_all: bool) -> list[s
              OR (status = 'track' AND last_profiled_at < ?)
              OR (status != 'track' AND last_profiled_at < ?)
            )
+         ORDER BY last_profiled_at IS NOT NULL, last_profiled_at
+         LIMIT ?
         """,
-        (tracked_cut, other_cut),
+        (tracked_cut, other_cut, PROFILE_BATCH_LIMIT),
     )
     return [row[0] for row in await cursor.fetchall()]
 
