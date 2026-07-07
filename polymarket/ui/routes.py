@@ -105,9 +105,9 @@ def _calendar_time(context, value, empty: str = "never") -> str:
     local = dt.astimezone(tz)
     today = datetime.now(timezone.utc).astimezone(tz).date()
     if local.date() == today:
-        return local.strftime("Today, %H:%M")
+        return local.strftime("Today at %H:%M")
     if local.date().toordinal() == today.toordinal() - 1:
-        return local.strftime("Yesterday, %H:%M")
+        return local.strftime("Yesterday at %H:%M")
     return local.strftime("%b %-d, %H:%M")
 
 
@@ -119,6 +119,18 @@ def _money_amount(value, empty: str = "—") -> str:
     except (InvalidOperation, ValueError):
         return str(value)
     return f"${amount:,.2f}"
+
+
+def _dedupe_alerts(items: list[dict]) -> list[dict]:
+    deduped = []
+    seen = set()
+    for item in items:
+        key = (str(item.get("severity") or ""), str(item.get("message") or ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
 
 
 _env.filters["relative_time"] = _relative_time
@@ -189,12 +201,26 @@ async def _base_context(conn, config, request: Request, active: str) -> dict:
         warnings.append(f"{freshness['partial_scans']} partial leaderboard scan(s) on record.")
     if freshness.get("stale_marks"):
         warnings.append(f"{freshness['stale_marks']} open position(s) have a stale price mark.")
+    recent = await queries.recent_alerts(conn, limit=8)
+    alert_items = _dedupe_alerts(
+        [{"severity": "notice", "message": message, "created_at": None} for message in warnings]
+        + [
+            {
+                "severity": a.get("severity") or "alert",
+                "message": a.get("message") or "Alert",
+                "created_at": a.get("created_at"),
+            }
+            for a in recent
+        ]
+    )
     return {
         "active_nav": active,
         "active_rule_version": version,
         "freshness": freshness,
         "display_tz": config.report_tz,
         "warnings": warnings,
+        "alert_items": alert_items,
+        "alert_count": len(alert_items),
         "query": dict(request.query_params),
         "path": request.url.path,
     }
@@ -235,7 +261,15 @@ async def _overview(conn, config, request):
 
 
 async def _wallets(conn, config, request):
-    return {"result": await queries.wallets(conn, dict(request.query_params))}
+    cur = await conn.execute(
+        "SELECT DISTINCT UPPER(TRIM(category)) FROM wallet_category_stats "
+        "WHERE category IS NOT NULL AND TRIM(category) != '' AND UPPER(TRIM(category)) != 'UNKNOWN' "
+        "ORDER BY 1"
+    )
+    categories = [row[0] for row in await cur.fetchall()]
+    if not categories:
+        categories = ["POLITICS", "CRYPTO", "SPORTS", "CULTURE", "BUSINESS", "TECH"]
+    return {"result": await queries.wallets(conn, dict(request.query_params)), "categories": categories}
 
 
 async def _wallet_detail(conn, config, request):

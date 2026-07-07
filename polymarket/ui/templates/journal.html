@@ -36,7 +36,7 @@
     <div><div class="text-gray-500">Reasons</div>{% for r in (e.reasons or []) %}<div class="text-green-300">+ {{ r }}</div>{% endfor %}</div>
     <div><div class="text-gray-500">Risks</div>{% for r in (e.risks or []) %}<div class="text-red-300">- {{ r }}</div>{% endfor %}</div>
     <div><div class="text-gray-500">Data at decision</div>
-      <div>src {{ e.source_entry_price or '—' }} → exec {{ e.executable_entry_price or '—' }}</div>
+      <div>seen price {{ e.source_entry_price or '—' }} / copy price {{ e.executable_entry_price or '—' }}</div>
       <div>data q. {{ e.data_quality_score if e.data_quality_score is not none else '—' }}</div>
       <div>gates: {{ e.hard_gates }}</div>
     </div>
@@ -44,7 +44,7 @@
   <div class="mt-2 text-xs">
     <div class="text-gray-500 mb-1">Reviews</div>
     <table>
-      <tr><th>Checkpoint</th><th>Price</th><th>Hypo. PnL</th><th>Actual PnL</th><th>Label</th><th>Eligible</th></tr>
+      <tr><th>Checkpoint</th><th>Price</th><th>What-if PnL</th><th>Paper PnL</th><th>Label</th><th>Can learn?</th></tr>
       {% for rv in e.reviews %}
       <tr><td>{{ rv.checkpoint }}</td><td class="font-mono">{{ rv.price_at_checkpoint or '—' }}</td><td>{{ money(rv.hypothetical_pnl_usd) }}</td><td>{{ money(rv.actual_pnl_usd) }}</td><td>{{ rv.decision_quality_label or '—' }}</td><td>{{ 'yes' if rv.eligible_for_learning else 'no' }}</td></tr>
       {% else %}<tr><td colspan="6" class="text-gray-600">No reviews yet.</td></tr>{% endfor %}

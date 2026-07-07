@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import money, components %}
+{% from "_macros.html" import money, components, help %}
 {% block title %}{{ w.wallet_address[:12] }} — Wallet{% endblock %}
 {% block content %}
 <a href="/polymarket/wallets" class="text-sm">‹ back to wallets</a>
@@ -9,8 +9,8 @@
 <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
   <div class="card p-3"><div class="text-xs text-gray-500">Global score</div><div class="text-xl font-bold font-mono">{{ w.global_score if w.global_score is not none else '—' }}</div>{{ components(w.score_components) }}</div>
   <div class="card p-3"><div class="text-xs text-gray-500">Status</div><div class="text-xl font-bold">{{ w.status }}</div><div class="text-xs text-gray-500">{{ w.status_reason_code or '' }}</div></div>
-  <div class="card p-3"><div class="text-xs text-gray-500">ROI 30d / win</div><div class="text-xl font-bold font-mono">{{ w.roi_30d or '—' }}</div><div class="text-xs text-gray-500">win {{ w.win_rate or '—' }}</div></div>
-  <div class="card p-3"><div class="text-xs text-gray-500">Executable ratio</div><div class="text-xl font-bold font-mono">{{ w.executable_trade_ratio or '—' }}</div><div class="text-xs text-gray-500">median delay {{ w.median_detection_delay_seconds or '—' }}s</div></div>
+  <div class="card p-3"><div class="text-xs text-gray-500">30d ROI / win rate</div><div class="text-xl font-bold font-mono">{{ w.roi_30d or '—' }}</div><div class="text-xs text-gray-500">win {{ w.win_rate or '—' }}</div></div>
+  <div class="card p-3"><div class="text-xs text-gray-500">Copyable trades {{ help('Share of this wallet history that Hermes could realistically copy at a usable paper price.') }}</div><div class="text-xl font-bold font-mono">{{ w.executable_trade_ratio or '—' }}</div><div class="text-xs text-gray-500">median delay {{ w.median_detection_delay_seconds or '—' }}s</div></div>
 </div>
 
 <div class="grid md:grid-cols-2 gap-4 mb-5">
@@ -18,11 +18,11 @@
     <div class="text-sm font-semibold mb-2">Profit concentration</div>
     <div class="text-sm">Top-1 share: <span class="font-mono">{{ w.profit_concentration_top1 or '—' }}</span></div>
     <div class="text-sm">Top-3 share: <span class="font-mono">{{ w.profit_concentration_top3 or '—' }}</span></div>
-    <div class="text-xs text-gray-500 mt-2">30d PnL (source): {{ money(w.pnl_30d_usd, 'source') }} · blind-copy sim: {{ money(w.blind_copy_pnl_30d_usd, 'blind') }}</div>
+    <div class="text-xs text-gray-500 mt-2">Wallet 30d PnL: {{ money(w.pnl_30d_usd, 'source') }} · blind-copy test: {{ money(w.blind_copy_pnl_30d_usd, 'blind') }}</div>
   </div>
   <div class="card p-4">
     <div class="text-sm font-semibold mb-2">Wallet's paper-copy performance</div>
-    <div class="text-sm">Resolved paper trades: {{ w.paper_copy_performance.resolved_trades }}</div>
+    <div class="text-sm">Closed paper trades: {{ w.paper_copy_performance.resolved_trades }}</div>
     <div class="text-sm">Realized: {{ money(w.paper_copy_performance.realized_pnl_usd) }}</div>
     {% if not w.history_complete %}
     <div class="text-xs mt-2 flex items-start gap-2" style="color:#b7f4ff;">
@@ -36,7 +36,7 @@
 <div class="card p-4 mb-5">
   <div class="text-sm font-semibold mb-2">Category performance</div>
   <table>
-    <tr><th>Category</th><th>Score</th><th>Consistency</th><th>Copyability</th><th>Resolved</th><th>ROI</th><th>Win</th><th>PnL</th></tr>
+    <tr><th>Category</th><th>Score</th><th>Consistency</th><th>Copyability</th><th>Closed trades</th><th>ROI</th><th>Win</th><th>Wallet PnL</th></tr>
     {% for c in w.category_stats %}
     <tr><td>{{ c.category }}</td><td class="font-mono">{{ c.category_score }}</td><td>{{ c.consistency_score }}</td><td>{{ c.copyability_score }}</td><td>{{ c.resolved_trade_count }}</td><td class="font-mono">{{ c.roi or '—' }}</td><td class="font-mono">{{ c.win_rate or '—' }}</td><td>{{ money(c.pnl_usd, 'source') }}</td></tr>
     {% else %}<tr><td colspan="8" class="text-gray-600">No category stats.</td></tr>{% endfor %}

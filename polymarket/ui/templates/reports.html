@@ -22,7 +22,7 @@
 
 <div class="card p-2">
 <table>
-  <tr><th>Date</th><th>Type</th><th>v</th><th>Filtered</th><th>Blind</th><th>Diff</th><th>Max DD</th><th>Delivery</th></tr>
+  <tr><th>Date</th><th>Type</th><th>v</th><th>Hermes</th><th>Blind copy</th><th>Edge</th><th>Max drop</th><th>Delivery</th></tr>
   {% for rep in result["items"] %}
   <tr>
     <td><a href="/polymarket/reports?date={{ rep.report_date }}&type={{ rep.report_type }}">{{ rep.report_date }}</a></td>

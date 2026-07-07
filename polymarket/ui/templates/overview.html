@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% from "_macros.html" import money, components %}
-{% block title %}Overview — Polymarket Research{% endblock %}
+{% from "_macros.html" import money, components, help %}
+{% block title %}Overview - Polymarket Research{% endblock %}
 {% block content %}
 <div x-data="{}" x-init="setInterval(async () => {
-      const moneyText = (v) => (v === null || v === undefined || v === '') ? '—' :
+      const moneyText = (v) => (v === null || v === undefined || v === '') ? '-' :
         new Intl.NumberFormat('en-US', { style:'currency', currency:'USD' }).format(Number(v));
       try { const r = await fetch('/api/polymarket/overview'); if(r.ok){ const d = await r.json();
         document.getElementById('ov-equity').textContent = moneyText(d.equity_usd);
@@ -11,124 +11,161 @@
       catch(e){}
     }, 60000)">
 
-  <div class="mb-5">
-    <div class="text-xs uppercase tracking-normal font-semibold" style="color:var(--cyan);">Overview</div>
-    <h1 class="text-2xl font-semibold mt-1">Am I profitable on paper?</h1>
+  <div class="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <div class="text-xs uppercase tracking-normal font-semibold" style="color:var(--cyan);">Overview</div>
+      <h1 class="text-2xl font-semibold mt-1">Paper trading snapshot</h1>
+      <p class="text-sm mt-2 max-w-2xl" style="color:var(--muted);">A quick read on the simulated account. Detailed wallet scoring and rule diagnostics live on the deeper pages.</p>
+    </div>
+    <a href="/polymarket/performance" class="badge">Performance details</a>
   </div>
 
-  <!-- HEADLINE: filtered paper PnL vs blind copy (with sample caveat). -->
-  <div class="card p-6 mb-4">
-    <div class="flex flex-wrap items-start justify-between gap-4 mb-4">
-      <div>
-        <div class="text-xs uppercase font-semibold tracking-normal" style="color:var(--muted);">Filtered paper PnL vs blind copy</div>
-        <div class="text-4xl font-semibold mono mt-3">{{ o.comparison.filtered_minus_blind_pnl_usd | money_amount }}</div>
+  <div class="grid lg:grid-cols-3 gap-4 mb-4">
+    <div class="card p-6 lg:col-span-2">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div class="text-xs uppercase font-semibold tracking-normal" style="color:var(--muted);">Paper edge {{ help('Paper edge compares Hermes filtered paper trades with a simple blind-copy baseline. Positive means Hermes is ahead of the baseline.') }}</div>
+          <div class="text-4xl font-semibold mono mt-3">{{ o.comparison.filtered_minus_blind_pnl_usd | money_amount }}</div>
+          <div class="text-sm mt-2" style="color:var(--muted);">Hermes paper result minus blind-copy baseline.</div>
+        </div>
+        <div class="badge">{{ 'Enough evidence' if o.comparison.sufficient_sample else 'Still collecting evidence' }}</div>
       </div>
-      <div class="badge">{{ o.comparison.verdict | replace('_', ' ') }}</div>
+
+      <div class="grid sm:grid-cols-2 gap-3 mt-5">
+        <div class="metric-card p-4">
+          <div class="text-xs muted">Hermes filtered strategy</div>
+          <div class="text-xl font-semibold mono mt-1">{{ o.comparison.filtered.net_pnl_usd | money_amount }}</div>
+          <div class="text-xs mt-1" style="color:var(--faint);">{{ o.comparison.filtered.sample }} closed trades</div>
+        </div>
+        <div class="metric-card p-4">
+          <div class="text-xs muted">Blind-copy baseline</div>
+          <div class="text-xl font-semibold mono mt-1">{{ o.comparison.blind.net_pnl_usd | money_amount }}</div>
+          <div class="text-xs mt-1" style="color:var(--faint);">{{ o.comparison.blind.sample }} closed trades</div>
+        </div>
+      </div>
+
+      {% if not o.comparison.sufficient_sample %}
+      <div class="text-xs mt-4" style="color:#b7f4ff;">
+        Need at least {{ o.comparison.min_sample }} closed trades in each group before this comparison is reliable.
+      </div>
+      {% endif %}
     </div>
-    <div class="text-sm" style="color:var(--muted);">
-      filtered {{ money(o.comparison.filtered.net_pnl_usd) }} <span class="mono">(n={{ o.comparison.filtered.sample }})</span>
-      <span class="mx-2" style="color:var(--border);">/</span>
-      blind {{ money(o.comparison.blind.net_pnl_usd,'blind') }} <span class="mono">(n={{ o.comparison.blind.sample }})</span>
+
+    <div class="card p-6">
+      <div class="text-sm font-semibold mb-4">Today at a glance</div>
+      <div class="space-y-3 text-sm">
+        <div class="flex items-center justify-between gap-3"><span class="muted">Tracked wallets</span><span class="mono font-semibold">{{ o.active_tracked_wallets }}</span></div>
+        <div class="flex items-center justify-between gap-3"><span class="muted">Copy candidates today</span><span class="mono font-semibold">{{ o.copy_candidates_today }}</span></div>
+        <div class="flex items-center justify-between gap-3"><span class="muted">Open positions</span><span class="mono font-semibold">{{ o.open_positions }}</span></div>
+        <div class="flex items-center justify-between gap-3"><span class="muted">Today's paper PnL</span><span id="ov-today" class="mono font-semibold">{{ o.today_pnl_usd | money_amount if o.today_pnl_usd is not none else '-' }}</span></div>
+      </div>
+      <div class="soft-divider mt-4 pt-4 text-xs" style="color:var(--faint);">
+        Alerts are in the bell. Health details are on the Health page.
+      </div>
     </div>
-    {% if o.comparison.caveat %}
-    <div class="text-xs mt-4 flex items-start gap-2" style="color:#b7f4ff;">
-      <svg class="icon mt-0.5" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 4.3 2.9 17a2 2 0 0 0 1.7 3h14.8a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z"/></svg>
-      <span>{{ o.comparison.caveat }}</span>
-    </div>
-    {% endif %}
   </div>
 
-  <!-- Secondary line: ROI, drawdown, equity, cash, open, closed PnL, freshness. -->
-  <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-5">
-    <div class="metric-card p-3"><div class="text-xs muted">ROI (filtered)</div><div class="text-lg font-semibold mono mt-1">{{ o.comparison.filtered.roi or '—' }}</div></div>
-    <div class="metric-card p-3"><div class="text-xs muted">Max drawdown</div><div class="text-lg font-semibold mono mt-1">{{ o.max_drawdown_usd | money_amount if o.max_drawdown_usd is not none else '—' }}</div></div>
-    <div class="metric-card p-3"><div class="text-xs muted">Equity</div><div id="ov-equity" class="text-lg font-semibold mono mt-1">{{ o.equity_usd | money_amount if o.equity_usd else '—' }}</div></div>
-    <div class="metric-card p-3"><div class="text-xs muted">Cash</div><div class="text-lg font-semibold mono mt-1">{{ o.cash_usd | money_amount if o.cash_usd else '—' }}</div></div>
-    <div class="metric-card p-3"><div class="text-xs muted">Open positions</div><div class="text-lg font-semibold mono mt-1">{{ o.open_positions }}</div></div>
-    <div class="metric-card p-3"><div class="text-xs muted">Closed PnL (paper)</div><div class="text-lg font-semibold mono mt-1">{{ o.total_pnl_usd | money_amount if o.total_pnl_usd is not none else '—' }}</div><div class="text-[0.65rem] mt-1" style="color:var(--faint);">today <span id="ov-today" class="mono">{{ o.today_pnl_usd | money_amount if o.today_pnl_usd is not none else '—' }}</span></div></div>
-    <div class="metric-card p-3"><div class="text-xs muted">Last fresh data</div><div class="text-xs mt-1">{{ (o.data_freshness.last_pnl_success_at or o.data_freshness.last_monitor_success_at) | calendar_time }}</div></div>
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+    <div class="metric-card p-4">
+      <div class="text-xs muted">Paper equity {{ help('Total simulated account value: cash plus the current value of open paper positions.') }}</div>
+      <div id="ov-equity" class="text-xl font-semibold mono mt-1">{{ o.equity_usd | money_amount if o.equity_usd else '-' }}</div>
+    </div>
+    <div class="metric-card p-4">
+      <div class="text-xs muted">Cash {{ help('Unused simulated cash available for future paper copies. Cash drops when a paper position opens.') }}</div>
+      <div class="text-xl font-semibold mono mt-1">{{ o.cash_usd | money_amount if o.cash_usd else '-' }}</div>
+    </div>
+    <div class="metric-card p-4">
+      <div class="text-xs muted">Closed paper PnL</div>
+      <div class="text-xl font-semibold mono mt-1">{{ o.total_pnl_usd | money_amount if o.total_pnl_usd is not none else '-' }}</div>
+    </div>
+    <div class="metric-card p-4">
+      <div class="text-xs muted">Max drawdown {{ help('Largest paper-account drop from a previous high-water mark.') }}</div>
+      <div class="text-xl font-semibold mono mt-1">{{ o.max_drawdown_usd | money_amount if o.max_drawdown_usd is not none else '-' }}</div>
+    </div>
   </div>
 
   <div class="grid md:grid-cols-3 gap-4">
     <div class="card p-4 md:col-span-2">
-      <div class="text-sm font-semibold mb-4">Paper equity</div>
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <div>
+          <div class="text-sm font-semibold">Paper equity curve</div>
+          <div class="text-xs mt-1" style="color:var(--faint);">Soft view of the simulated account value over time.</div>
+        </div>
+      </div>
       {% if o.sparkline.empty %}
-        <div class="text-xs text-gray-500">No pnl snapshots yet.</div>
+        <div class="empty-note">No PnL snapshots yet.</div>
       {% else %}
-        <svg viewBox="0 0 {{ o.sparkline.width }} {{ o.sparkline.height }}" width="100%" height="112" preserveAspectRatio="none" role="img" aria-label="Paper equity curve">
+        <svg viewBox="0 0 {{ o.sparkline.width }} {{ o.sparkline.height }}" width="100%" height="124" preserveAspectRatio="none" role="img" aria-label="Paper equity curve">
           <defs>
             <linearGradient id="overviewEquityFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stop-color="#63e6ff" stop-opacity="0.22"/>
+              <stop offset="0%" stop-color="#63e6ff" stop-opacity="0.18"/>
               <stop offset="100%" stop-color="#63e6ff" stop-opacity="0"/>
             </linearGradient>
             <filter id="overviewEquityGlow" x="-10%" y="-40%" width="120%" height="180%">
-              <feGaussianBlur stdDeviation="2.4" result="blur"/>
+              <feGaussianBlur stdDeviation="2" result="blur"/>
               <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
             </filter>
           </defs>
           <path d="{{ o.sparkline.area_path }}" fill="url(#overviewEquityFill)"/>
-          <path d="{{ o.sparkline.path }}" fill="none" stroke="#63e6ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" filter="url(#overviewEquityGlow)"/>
+          <path d="{{ o.sparkline.path }}" fill="none" stroke="#63e6ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" filter="url(#overviewEquityGlow)"/>
         </svg>
         <div class="text-xs" style="color:var(--faint);">from {{ o.sparkline.first | money_amount }} to {{ o.sparkline.last | money_amount }}</div>
       {% endif %}
     </div>
+
     <div class="card p-4">
-      <div class="text-sm font-semibold mb-2">What Hermes learned today</div>
-      <div class="text-sm text-gray-300 mb-2">{{ o.top_lesson or 'No lesson recorded yet.' }}</div>
-      <div class="text-xs mt-3 mb-1" style="color:var(--muted);">Alerts</div>
-      {% for a in o.alerts[:3] %}
-        <div class="text-xs flex items-start gap-2" style="color:#b7f4ff;">
-          <svg class="icon mt-0.5" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 4.3 2.9 17a2 2 0 0 0 1.7 3h14.8a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z"/></svg>
-          <span>{{ a.severity }}: {{ a.message }}</span>
-        </div>
-      {% else %}<div class="text-xs text-gray-600">none</div>{% endfor %}
+      <div class="text-sm font-semibold mb-2">Learning status</div>
+      <div class="text-sm text-gray-300">{{ o.top_lesson or 'No lesson recorded yet.' }}</div>
+      {% if not o.top_lesson %}
+      <div class="text-xs mt-2" style="color:var(--faint);">Lessons appear after closed paper trades are reviewed.</div>
+      {% endif %}
+      <div class="soft-divider mt-4 pt-4 text-xs" style="color:var(--faint);">
+        End-of-day report: {{ o.report_status.report_date ~ ' (' ~ o.report_status.delivery_status ~ ')' if o.report_status else 'none yet' }}
+      </div>
     </div>
   </div>
 
-  <div class="card p-4 mt-4">
-    <div class="text-sm font-semibold mb-2">What changed (rule changes + wallet status transitions)</div>
+  <details class="card p-4 mt-4">
+    <summary class="text-sm font-semibold">Rule and wallet changes</summary>
+    <div class="table-note mt-2 mb-2">Recent rule edits and wallet status moves.</div>
     <table>
-      <tr><th>When</th><th>What</th><th>From → to</th><th>Context</th></tr>
+      <tr><th>When</th><th>What changed</th><th>Before / after</th><th>Context</th></tr>
       {% for e in o.changes_feed %}
       <tr>
         <td class="text-xs" style="color:var(--muted);">{{ e.at | calendar_time }}</td>
         {% if e.kind == 'rule_change' %}
-          <td>rule v{{ e.rule_version if e.rule_version is not none else '—' }} · {{ e.parameter_family }}</td>
-          <td class="mono text-xs">{{ e.old_value }} → {{ e.new_value }}</td>
+          <td>Rule v{{ e.rule_version if e.rule_version is not none else '-' }} - {{ e.parameter_family }}</td>
+          <td class="mono text-xs">{{ e.old_value }} / {{ e.new_value }}</td>
           <td class="text-xs">{{ e.outcome_status or 'pending' }}</td>
         {% else %}
           <td>wallet <a href="/polymarket/wallets/{{ e.wallet_address }}">{{ e.wallet_address[:10] }}</a></td>
-          <td class="text-xs">{{ e['from'] }} → {{ e.to }}</td>
-          <td class="text-xs text-gray-500">{{ e.status_reason_code or '' }} · score {{ e.global_score }}</td>
+          <td class="text-xs">{{ e['from'] }} / {{ e.to }}</td>
+          <td class="text-xs text-gray-500">{{ e.status_reason_code or '' }} - score {{ e.global_score }}</td>
         {% endif %}
       </tr>
-      {% else %}<tr><td colspan="4" class="text-gray-600">Nothing changed yet.</td></tr>{% endfor %}
+      {% else %}<tr><td colspan="4" class="empty-note">Nothing changed yet.</td></tr>{% endfor %}
     </table>
-  </div>
+  </details>
 
-  <div class="card p-4 mt-4">
-    <div class="text-sm font-semibold mb-2">Which wallets are worth copying? <span class="text-xs text-gray-500">(ranked by copied paper PnL)</span></div>
+  <details class="card p-4 mt-4">
+    <summary class="text-sm font-semibold">Wallet shortlist</summary>
+    <div class="table-note mt-2 mb-2">Wallets ranked by Hermes paper-copy PnL. The full sortable list is on Wallets.</div>
     <table>
-      <tr><th>Wallet</th><th>Copied paper PnL</th><th>Copies</th><th>Copy win</th><th>Avg slip</th><th>Score</th><th>Status</th><th>Best cat</th><th>Last signal</th></tr>
+      <tr><th>Wallet</th><th>Paper-copy PnL</th><th>Copies</th><th>Win rate</th><th>Avg slippage</th><th>Score</th><th>Status</th><th>Best category</th><th>Last copy</th></tr>
       {% for w in o.top_wallets %}
       <tr>
         <td><a href="/polymarket/wallets/{{ w.wallet_address }}">{{ w.label or w.wallet_address[:10] }}</a></td>
         <td>{{ money(w.copied_paper_pnl_usd) }}</td>
         <td>{{ w.copied_trade_count }}</td>
-        <td class="font-mono">{{ w.copy_win_rate or '—' }}</td>
-        <td class="font-mono">{{ w.avg_entry_slippage or '—' }}</td>
+        <td class="font-mono">{{ w.copy_win_rate or '-' }}</td>
+        <td class="font-mono">{{ w.avg_entry_slippage or '-' }}</td>
         <td class="font-mono">{{ w.global_score }} {{ components(w.score_components) }}</td>
         <td>{{ w.status }}</td>
-        <td>{{ w.best_category or '—' }}</td>
-        <td class="text-xs" style="color:var(--muted);">{{ w.last_signal_at | relative_time(empty='—') }}</td>
+        <td>{{ w.best_category or '-' }}</td>
+        <td class="text-xs" style="color:var(--muted);">{{ w.last_signal_at | relative_time(empty='-') }}</td>
       </tr>
-      {% else %}<tr><td colspan="9" class="text-gray-600">No tracked wallets yet.</td></tr>{% endfor %}
+      {% else %}<tr><td colspan="9" class="empty-note">No tracked wallets yet.</td></tr>{% endfor %}
     </table>
-  </div>
-
-  <div class="text-xs text-gray-500 mt-4">
-    End-of-day report: {{ o.report_status.report_date ~ ' (' ~ o.report_status.delivery_status ~ ')' if o.report_status else 'none yet' }} ·
-    data health: {{ o.data_freshness.unresolved_critical_events }} critical open
-  </div>
+  </details>
 </div>
 {% endblock %}

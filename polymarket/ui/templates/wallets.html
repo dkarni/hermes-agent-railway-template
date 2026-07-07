@@ -1,27 +1,37 @@
 {% extends "base.html" %}
-{% from "_macros.html" import pager, sortlink, money, components %}
-{% block title %}Wallets — Polymarket Research{% endblock %}
+{% from "_macros.html" import pager, sortlink, money, components, help %}
+{% block title %}Wallets - Polymarket Research{% endblock %}
 {% block content %}
-<h1 class="text-xl font-bold mb-3">Wallet rankings</h1>
+<div class="mb-4">
+  <h1 class="text-xl font-semibold">Wallet rankings</h1>
+  <p class="text-sm mt-1" style="color:var(--muted);">Find wallets that are worth watching or copying in the paper simulator.</p>
+</div>
 
 <form method="get" class="card p-3 mb-4 flex flex-wrap gap-3 text-sm items-end">
-  <label>Category<br><input name="category" value="{{ query.get('category','') }}" class="bg-gray-800 rounded px-2 py-1"></label>
+  <label>Category<br>
+    <select name="category" class="bg-gray-800 rounded px-2 py-1">
+      <option value="">All categories</option>
+      {% for c in categories %}
+      <option value="{{ c }}" {{ 'selected' if query.get('category','')|upper == c }}>{{ c|title }}</option>
+      {% endfor %}
+    </select>
+  </label>
   <label>Status<br>
     <select name="status" class="bg-gray-800 rounded px-2 py-1">
-      <option value="">any</option>
-      {% for s in ['track','watch','ignore','data_error'] %}
-      <option value="{{ s }}" {{ 'selected' if query.get('status')==s }}>{{ s }}</option>{% endfor %}
+      <option value="">Any status</option>
+      {% for value,label in [('track','Tracked'),('watch','Watch'),('ignore','Ignored'),('data_error','Data issue')] %}
+      <option value="{{ value }}" {{ 'selected' if query.get('status')==value }}>{{ label }}</option>{% endfor %}
     </select>
   </label>
   <label>Min score<br><input name="min_score" value="{{ query.get('min_score','') }}" class="bg-gray-800 rounded px-2 py-1 w-20"></label>
-  <label>Min resolved<br><input name="min_resolved" value="{{ query.get('min_resolved','') }}" class="bg-gray-800 rounded px-2 py-1 w-20"></label>
-  <label class="flex items-center gap-1"><input type="checkbox" name="copyable_only" value="1" {{ 'checked' if query.get('copyable_only') }}> copyable only</label>
-  <label class="flex items-center gap-1"><input type="checkbox" name="exclude_stale" value="1" {{ 'checked' if query.get('exclude_stale') }}> exclude stale</label>
-  <button class="bg-blue-700 text-white rounded px-3 py-1">Filter</button>
-  <a class="ml-auto" href="/api/polymarket/wallets?format=csv{% for k,v in query.items() if k not in ['format'] %}&{{k}}={{v}}{% endfor %}">Export CSV</a>
+  <label>Min closed trades<br><input name="min_resolved" value="{{ query.get('min_resolved','') }}" class="bg-gray-800 rounded px-2 py-1 w-24"></label>
+  <label class="flex items-center gap-1"><input type="checkbox" name="copyable_only" value="1" {{ 'checked' if query.get('copyable_only') }}> tracked only</label>
+  <label class="flex items-center gap-1"><input type="checkbox" name="exclude_stale" value="1" {{ 'checked' if query.get('exclude_stale') }}> complete history only</label>
+  <button class="primary-button">Filter</button>
+  <a class="ml-auto badge" href="/api/polymarket/wallets?format=csv{% for k,v in query.items() if k not in ['format'] %}&{{k}}={{v}}{% endfor %}">Export CSV</a>
 </form>
 
-<div class="text-xs text-gray-500 mb-1">Default rank: copied paper PnL contribution. Raw source PnL sort available via the column header.</div>
+<div class="table-note mb-2">Default rank: Hermes paper-copy PnL. Wallet 30d PnL is the original wallet's Polymarket history, not Hermes' simulated result.</div>
 <div class="card p-2">
 <table>
   <tr>
@@ -32,9 +42,9 @@
     <th>Avg slip</th>
     <th>{{ sortlink('/polymarket/wallets', query, 'score', 'Score') }}</th>
     <th>Status</th>
-    <th>{{ sortlink('/polymarket/wallets', query, 'raw_pnl', 'Raw PnL') }}</th>
-    <th>{{ sortlink('/polymarket/wallets', query, 'resolved', 'Resolved') }}</th>
-    <th>Best cat</th>
+    <th>{{ sortlink('/polymarket/wallets', query, 'raw_pnl', 'Wallet 30d PnL') }} {{ help('Profit or loss from the original wallet history on Polymarket. This is not Hermes paper PnL.') }}</th>
+    <th>{{ sortlink('/polymarket/wallets', query, 'resolved', 'Closed trades') }} {{ help('Markets that have resolved, so the wallet result can be judged.') }}</th>
+    <th>Best category</th>
     <th>Last signal</th>
   </tr>
   {% for w in result["items"] %}

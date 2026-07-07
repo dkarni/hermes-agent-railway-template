@@ -7,14 +7,16 @@
 <form method="get" class="card p-3 mb-4 flex flex-wrap gap-3 text-sm items-end">
   <label>Status<br>
     <select name="status" class="bg-gray-800 rounded px-2 py-1">
-      <option value="">any</option>
-      {% for s in ['open','closed','resolved'] %}<option value="{{ s }}" {{ 'selected' if query.get('status')==s }}>{{ s }}</option>{% endfor %}
+      <option value="">Any status</option>
+      {% for value,label in [('open','Open'),('closed','Closed'),('resolved','Settled market')] %}
+      <option value="{{ value }}" {{ 'selected' if query.get('status')==value }}>{{ label }}</option>{% endfor %}
     </select>
   </label>
-  <label>Cohort<br>
+  <label>Group<br>
     <select name="cohort" class="bg-gray-800 rounded px-2 py-1">
-      <option value="">any</option>
-      {% for c in ['filtered','blind'] %}<option value="{{ c }}" {{ 'selected' if query.get('cohort')==c }}>{{ c }}</option>{% endfor %}
+      <option value="">Any group</option>
+      {% for value,label in [('filtered','Hermes filtered'),('blind','Blind copy')] %}
+      <option value="{{ value }}" {{ 'selected' if query.get('cohort')==value }}>{{ label }}</option>{% endfor %}
     </select>
   </label>
   <button class="bg-blue-700 text-white rounded px-3 py-1">Filter</button>
@@ -23,10 +25,10 @@
 
 <div class="card p-2">
 <table>
-  <tr><th>Cohort</th><th>Wallet</th><th>Outcome</th><th>Size</th><th>Entry / src</th><th>Mark</th><th>Unreal.</th><th>{{ sortlink('/polymarket/paper-trades', query, 'pnl', 'Realized') }}</th><th>{{ sortlink('/polymarket/paper-trades', query, 'status', 'Status') }}</th><th></th></tr>
+  <tr><th>Group</th><th>Wallet</th><th>Outcome</th><th>Size</th><th>Copy price / seen price</th><th>Current mark</th><th>Open PnL</th><th>{{ sortlink('/polymarket/paper-trades', query, 'pnl', 'Closed PnL') }}</th><th>{{ sortlink('/polymarket/paper-trades', query, 'status', 'Status') }}</th><th></th></tr>
   {% for t in result["items"] %}
   <tr>
-    <td>{{ t.cohort }}{% if t.is_admin %} <span class="badge bg-gray-700">admin</span>{% endif %}</td>
+    <td>{{ 'Blind copy' if t.cohort == 'blind' else 'Hermes filtered' }}{% if t.is_admin %} <span class="badge bg-gray-700">admin</span>{% endif %}</td>
     <td>{% if t.wallet_address %}<a href="/polymarket/wallets/{{ t.wallet_address }}">{{ t.wallet_address[:10] }}</a>{% else %}—{% endif %}</td>
     <td>{{ t.outcome or '—' }}</td>
     <td class="font-mono text-xs">{{ money(t.entry_cost_usd) }}</td>
@@ -35,11 +37,11 @@
     <td class="font-mono text-xs">{{ money(t.unrealized_pnl_usd) }}</td>
     <td class="font-mono text-xs">{{ money(t.realized_pnl_usd) }}</td>
     <td>{{ t.status }}</td>
-    <td><a href="/api/polymarket/paper-trades/{{ t.id }}" class="text-xs">detail →</a></td>
+    <td><a href="/api/polymarket/paper-trades/{{ t.id }}" class="text-xs">detail</a></td>
   </tr>
   {% else %}<tr><td colspan="10" class="text-gray-600">No paper trades yet.</td></tr>{% endfor %}
 </table>
 </div>
 {{ pager(result, '/polymarket/paper-trades', query) }}
-<p class="text-xs text-gray-500 mt-2">All PnL is paper (simulated). Blind cohort uses fixed $10 sizing with no quality filters.</p>
+<p class="text-xs text-gray-500 mt-2">All PnL here is simulated. The blind group is the simple baseline: fixed $10 copies with no wallet-quality filters.</p>
 {% endblock %}

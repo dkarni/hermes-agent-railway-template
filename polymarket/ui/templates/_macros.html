@@ -26,7 +26,14 @@
 
 {% macro money(v, kind='paper') %}
   {% if v is none %}<span class="text-gray-600">—</span>
-  {% else %}<span class="mono">{{ v | money_amount }}</span> <span class="text-[0.6rem] uppercase" style="color:var(--faint);">{{ kind }}</span>{% endif %}
+  {% else %}
+    {% set label = {'paper':'paper sim','source':'wallet','blind':'blind test'}.get(kind, kind) %}
+    <span class="mono">{{ v | money_amount }}</span> <span class="text-[0.6rem] uppercase" style="color:var(--faint);">{{ label }}</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro help(text) %}
+  <span class="help" title="{{ text }}" aria-label="{{ text }}">?</span>
 {% endmacro %}
 
 {% macro components(scores) %}
