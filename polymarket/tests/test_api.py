@@ -31,6 +31,7 @@ async def test_health_endpoint(tmp_path):
                 "0002_wave2.sql",
                 "0003_wave3.sql",
                 "0004_wave3_reports.sql",
+                "0005_remove_unknown_wallet_categories.sql",
             ]
             assert body["active_rule_set_version"] == 1
             assert body["scheduler_jobs"] == []  # no scheduler passed in this test

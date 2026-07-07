@@ -17,6 +17,7 @@ from . import db as dbmod
 from . import serialize as ser
 from .domain import benchmarks as bm
 from .domain import calibration as cal
+from .domain.categories import canonical_category
 
 ZERO = Decimal(0)
 
@@ -302,10 +303,10 @@ async def wallets(conn, params) -> dict:
     if params.get("exclude_stale") in ("1", "true", "yes", "on"):
         where.append("wp.history_complete = 1")
 
-    category = params.get("category")
+    category = canonical_category(params.get("category"))
     join = ""
     if category:
-        join = "JOIN wallet_category_stats wcs ON wcs.wallet_address = wp.wallet_address AND wcs.category = ?"
+        join = "JOIN wallet_category_stats wcs ON wcs.wallet_address = wp.wallet_address AND UPPER(TRIM(wcs.category)) = ?"
         args = [category] + args  # category binds before the WHERE args on the joined table
 
     where_sql = " AND ".join(where)
@@ -387,7 +388,9 @@ async def _wallet_row(conn, wp: dict, contrib: dict | None = None) -> dict:
     # Best category (highest category_score).
     cur = await conn.execute(
         "SELECT category, category_score FROM wallet_category_stats "
-        "WHERE wallet_address = ? ORDER BY category_score DESC NULLS LAST LIMIT 1",
+        "WHERE wallet_address = ? "
+        "AND category IS NOT NULL AND TRIM(category) != '' AND UPPER(TRIM(category)) != 'UNKNOWN' "
+        "ORDER BY category_score DESC NULLS LAST LIMIT 1",
         (wp["wallet_address"],),
     )
     best = await cur.fetchone()
@@ -435,7 +438,9 @@ async def wallet_detail(conn, address: str) -> dict | None:
     base = await _wallet_row(conn, dict(row), contrib)
 
     cur = await conn.execute(
-        "SELECT * FROM wallet_category_stats WHERE wallet_address = ? ORDER BY category_score DESC NULLS LAST",
+        "SELECT * FROM wallet_category_stats WHERE wallet_address = ? "
+        "AND category IS NOT NULL AND TRIM(category) != '' AND UPPER(TRIM(category)) != 'UNKNOWN' "
+        "ORDER BY category_score DESC NULLS LAST",
         (address,),
     )
     cats = [

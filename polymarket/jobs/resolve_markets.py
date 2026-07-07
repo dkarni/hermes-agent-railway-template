@@ -21,6 +21,7 @@ import aiosqlite
 from ..adapters.gamma import GammaAdapter
 from ..config import Config
 from ..db import utcnow_iso
+from ..domain.categories import canonical_category
 from ..jobs.common import now_ts, upsert_market
 from ..jobs.runner import JobContext
 
@@ -57,7 +58,7 @@ def normalize_category(labels: list[str]) -> tuple[str, str]:
     for label in labels:
         mapped = TAG_CATEGORIES.get(label.strip().lower())
         if mapped:
-            return mapped, source
+            return canonical_category(mapped), source
     return "OTHER", source
 
 
@@ -189,7 +190,7 @@ async def _fill_categories(ctx: JobContext, gamma: GammaAdapter) -> int:
     cur = await ctx.conn.execute(
         """
         SELECT DISTINCT event_id FROM markets
-        WHERE (category IS NULL OR category = '')
+        WHERE (category IS NULL OR category = '' OR UPPER(TRIM(category)) = 'UNKNOWN')
           AND event_id IS NOT NULL AND event_id != ''
           AND status != 'unmapped'
         LIMIT ?
@@ -208,7 +209,7 @@ async def _fill_categories(ctx: JobContext, gamma: GammaAdapter) -> int:
             category, source = "OTHER", ""
         cur = await ctx.conn.execute(
             "UPDATE markets SET category = ?, source_category = ? "
-            "WHERE event_id = ? AND (category IS NULL OR category = '')",
+            "WHERE event_id = ? AND (category IS NULL OR category = '' OR UPPER(TRIM(category)) = 'UNKNOWN')",
             (category, source, event_id),
         )
         filled += cur.rowcount or 0
@@ -218,8 +219,11 @@ async def _fill_categories(ctx: JobContext, gamma: GammaAdapter) -> int:
         UPDATE wallet_trades SET category = (
             SELECT m.category FROM markets m WHERE m.condition_id = wallet_trades.condition_id
         )
-        WHERE (category IS NULL OR category = '')
-          AND condition_id IN (SELECT condition_id FROM markets WHERE category != '')
+        WHERE (category IS NULL OR category = '' OR UPPER(TRIM(category)) = 'UNKNOWN')
+          AND condition_id IN (
+              SELECT condition_id FROM markets
+               WHERE category IS NOT NULL AND category != '' AND UPPER(TRIM(category)) != 'UNKNOWN'
+          )
         """
     )
     return filled

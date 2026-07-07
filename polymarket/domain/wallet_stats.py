@@ -43,6 +43,8 @@ from decimal import Decimal
 from statistics import median
 from typing import Iterable, Mapping, Sequence
 
+from .categories import canonical_category
+
 ZERO = Decimal(0)
 ONE = Decimal(1)
 
@@ -176,9 +178,12 @@ def compute_wallet_stats(
     category_rows: dict[str, dict] = {}
     entry_ts_by_key: dict[tuple[str, str], list[int]] = {}
 
-    def _cat(cat: str) -> dict:
+    def _cat(cat: str) -> dict | None:
+        key = canonical_category(cat)
+        if not key:
+            return None
         return category_rows.setdefault(
-            cat or "UNKNOWN",
+            key,
             {"trades": 0, "resolved": 0, "pnl": ZERO, "capital": ZERO, "wins": 0, "losses": 0},
         )
 
@@ -188,14 +193,16 @@ def compute_wallet_stats(
         sizes.append(t.size)
         distinct_markets.add(t.condition_id)
         crow = _cat(t.category)
-        crow["trades"] += 1
+        if crow is not None:
+            crow["trades"] += 1
         if t.side == "BUY":
             buy_count += 1
             notional = t.price * t.size
             pos.shares += t.size
             pos.cost += notional
             capital_deployed += notional
-            crow["capital"] += notional
+            if crow is not None:
+                crow["capital"] += notional
             entry_ts_by_key.setdefault(key, []).append(t.timestamp)
         else:  # SELL — realize against average cost, no shorts
             sell_count += 1
@@ -206,7 +213,8 @@ def compute_wallet_stats(
                 pos.shares -= sell_shares
                 realizing_events.append((t.timestamp, realized))
                 per_trade_pnl.append(realized)
-                crow["pnl"] += realized
+                if crow is not None:
+                    crow["pnl"] += realized
 
     # Settle residual open positions in resolved markets.
     resolved_wins = 0
@@ -223,15 +231,19 @@ def compute_wallet_stats(
                 realized = pos.shares * (settle - pos.avg_cost)
                 realizing_events.append((window_end_ts, realized))
                 per_trade_pnl.append(realized)
-                crow["pnl"] += realized
+                if crow is not None:
+                    crow["pnl"] += realized
             # win/loss counts every resolved position the wallet held
             if won:
                 resolved_wins += 1
-                crow["wins"] += 1
+                if crow is not None:
+                    crow["wins"] += 1
             else:
                 resolved_losses += 1
-                crow["losses"] += 1
-            crow["resolved"] += 1
+                if crow is not None:
+                    crow["losses"] += 1
+            if crow is not None:
+                crow["resolved"] += 1
             for ets in entry_ts_by_key.get(key, []):
                 entry_timings.append(max(0, window_end_ts - ets))
             pos.shares = ZERO
@@ -270,7 +282,7 @@ def compute_wallet_stats(
     completeness = _completeness(
         trade_count=trade_count,
         resolved_total=resolved_total,
-        has_categories=any(t.category for t in ordered),
+        has_categories=any(canonical_category(t.category) for t in ordered),
         executable_ratio=executable_ratio,
     )
 
@@ -315,9 +327,10 @@ def compute_wallet_stats(
 
 def _category_for(trades: Sequence[StatTrade], condition_id: str) -> str:
     for t in trades:
-        if t.condition_id == condition_id and t.category:
-            return t.category
-    return "UNKNOWN"
+        cat = canonical_category(t.category)
+        if t.condition_id == condition_id and cat:
+            return cat
+    return ""
 
 
 def _finalize_category(cat: str, row: dict) -> CategoryStat:

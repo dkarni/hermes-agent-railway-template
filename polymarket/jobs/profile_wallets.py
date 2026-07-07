@@ -23,6 +23,7 @@ from ..db import (
     utcnow_iso,
 )
 from ..domain import scoring
+from ..domain.categories import canonical_category
 from ..domain.wallet_stats import (
     ResolvedMarket,
     StatTrade,
@@ -161,7 +162,9 @@ async def _load_history(
     trades: list[StatTrade] = []
     for r in rows:
         condition_id = r[0] or ""
-        category = r[6] or (market_cache.get(condition_id, {}).get("category") or "")
+        stored_category = canonical_category(r[6])
+        market_category = canonical_category(market_cache.get(condition_id, {}).get("category"))
+        category = stored_category or market_category
         trades.append(
             StatTrade(
                 condition_id=condition_id,
@@ -295,7 +298,14 @@ async def _persist_category_stats(
     ctx: JobContext, wallet: str, stats: WalletStats, payload: dict
 ) -> None:
     now = utcnow_iso()
+    await ctx.conn.execute(
+        "DELETE FROM wallet_category_stats WHERE wallet_address = ?",
+        (wallet,),
+    )
     for cat, cs in stats.per_category.items():
+        cat = canonical_category(cat)
+        if not cat:
+            continue
         await ctx.conn.execute(
             """
             INSERT INTO wallet_category_stats (

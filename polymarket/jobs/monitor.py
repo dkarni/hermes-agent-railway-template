@@ -13,6 +13,7 @@ position-close / analysis-only reason; actual position closing activates Wave 3.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from decimal import Decimal
 
 import aiosqlite
@@ -32,6 +33,7 @@ from ..db import (
 )
 from ..domain import decisions as dec
 from ..domain import trade_scoring as ts
+from ..domain.categories import canonical_category
 from ..domain.decisions import NullPortfolioView
 from ..jobs.common import (
     load_active_rule_set,
@@ -285,12 +287,19 @@ async def _ensure_market(ctx: JobContext, gamma: GammaAdapter, trade: WalletTrad
 
 
 async def _load_market(conn: aiosqlite.Connection, condition_id: str) -> Market | None:
-    cursor = await conn.execute("SELECT raw_json FROM markets WHERE condition_id = ?", (condition_id,))
+    cursor = await conn.execute(
+        "SELECT raw_json, category FROM markets WHERE condition_id = ?", (condition_id,)
+    )
     row = await cursor.fetchone()
     if row is None or not row[0]:
         return None
     from ..adapters.gamma import parse_market
-    return parse_market(json.loads(row[0]))
+
+    market = parse_market(json.loads(row[0]))
+    category = canonical_category(row[1]) or canonical_category(market.category)
+    if category != market.category:
+        return replace(market, category=category)
+    return market
 
 
 async def _capture_snapshot(
@@ -369,14 +378,14 @@ async def _build_inputs(
     seconds_ttr = (
         seconds_to_resolution(market.end_date, now_ts=now_ts()) if market else None
     )
-    category = market.category if market else ""
+    category = canonical_category(market.category if market else "")
     proven, cat_score, w_status, w_score, w_dq, profile_age = await _load_wallet_facts(
         conn, wallet, category
     )
     market_facts = ts.MarketFacts(
         condition_id=trade.condition_id or "",
         market_id=(market.market_id if market else ""),
-        category=(market.category if market else ""),
+        category=category,
         closed=(market.closed if market else True),
         resolved=(market.resolved if market else False),
         paused=False,
@@ -415,7 +424,7 @@ async def _build_inputs(
         source_price=trade.price,
         detection_delay_seconds=max(0, now_ts() - trade.timestamp),
         is_duplicate=False,
-        category=(market.category if market else ""),
+        category=category,
         outcome=trade.outcome or "",
     )
     return ts.TradeScoreInputs(
@@ -453,14 +462,23 @@ async def _load_wallet_facts(
         except ValueError:
             profile_age = None
     cur2 = await conn.execute(
-        "SELECT category, category_score FROM wallet_category_stats WHERE wallet_address = ?",
+        """
+        SELECT category, category_score FROM wallet_category_stats
+         WHERE wallet_address = ?
+           AND category IS NOT NULL
+           AND TRIM(category) != ''
+           AND UPPER(TRIM(category)) != 'UNKNOWN'
+        """,
         (wallet,),
     )
     proven: list[str] = []
     cat_score = None
     for c in await cur2.fetchall():
-        proven.append(c[0])
-        if category and c[0] == category:
+        proven_cat = canonical_category(c[0])
+        if not proven_cat:
+            continue
+        proven.append(proven_cat)
+        if category and proven_cat == category:
             cat_score = Decimal(c[1] or 0)
     return tuple(proven), cat_score, status, gscore, dq, profile_age
 

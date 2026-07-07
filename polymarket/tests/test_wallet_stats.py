@@ -76,6 +76,18 @@ def test_category_stats_split():
     assert s.per_category["CRYPTO"].win_rate == Decimal("1.000000")
 
 
+def test_missing_categories_do_not_create_unknown_bucket():
+    trades = [
+        _t("cA", "Yes", "BUY", "0.5", "100", 1000, ""),
+        _t("cB", "Yes", "BUY", "0.5", "100", 1000, "UNKNOWN"),
+    ]
+    resolved = {"cA": ResolvedMarket(True, "Yes"), "cB": ResolvedMarket(True, "No")}
+    s = compute_wallet_stats(trades, resolved, window_days=30, window_end_ts=3000)
+    assert s.net_realized_pnl == Decimal("0.000000")
+    assert s.resolved_trade_count == 2
+    assert s.per_category == {}
+
+
 def test_drawdown_estimate():
     # cumulative: +100 then -60 -> peak 100, trough 40 -> drawdown 60
     trades = [

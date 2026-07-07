@@ -21,6 +21,7 @@ from ..db import (
     usd_to_micro,
     utcnow_iso,
 )
+from ..domain.categories import canonical_category
 
 
 def observed_idempotency_key(
@@ -65,6 +66,7 @@ async def upsert_market(conn: aiosqlite.Connection, market: Market) -> None:
     winning_outcome = _winning_outcome(market)
     status = "resolved" if market.resolved else ("closed" if market.closed else "open")
     now = utcnow_iso()
+    category = canonical_category(market.category)
     await conn.execute(
         """
         INSERT INTO markets (
@@ -97,7 +99,7 @@ async def upsert_market(conn: aiosqlite.Connection, market: Market) -> None:
             market.event_id or None,
             market.question or None,
             market.event_title or None,
-            market.category or None,
+            category or None,
             market.category or None,
             market.slug or None,
             market.event_slug or None,

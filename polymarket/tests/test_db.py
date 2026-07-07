@@ -75,6 +75,7 @@ async def test_migration_runner_idempotent(tmp_path):
             "0002_wave2.sql",
             "0003_wave3.sql",
             "0004_wave3_reports.sql",
+            "0005_remove_unknown_wallet_categories.sql",
         ]
     finally:
         await conn.close()
