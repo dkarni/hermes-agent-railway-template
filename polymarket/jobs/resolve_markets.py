@@ -69,9 +69,21 @@ async def run_resolve_markets(
     would take weeks)."""
     import time as _time
 
-    deadline = _time.monotonic() + budget_seconds
+    # Per-phase budget slices: serial phases starved categories in production
+    # (backfill alone consumed the whole budget for hours; categories stayed
+    # 0% and the wallet_category gate failed on every signal).
+    start = _time.monotonic()
+    cat_deadline = start + budget_seconds * 0.25
+    backfill_deadline = start + budget_seconds * 0.65
+    deadline = start + budget_seconds
     backfilled = resolved = categorized = 0
-    while _time.monotonic() < deadline:
+    while _time.monotonic() < cat_deadline:
+        n = await _fill_categories(ctx, gamma)
+        categorized += n
+        await ctx.conn.commit()
+        if n == 0:
+            break
+    while _time.monotonic() < backfill_deadline:
         n = await _backfill_missing(ctx, gamma)
         backfilled += n
         await ctx.conn.commit()
@@ -86,6 +98,7 @@ async def run_resolve_markets(
             # nothing left, or only perpetually-open markets we already tried
             break
         seen_due.update(due)
+    # Final category pass: catch markets backfilled/resolved in THIS run.
     while _time.monotonic() < deadline:
         n = await _fill_categories(ctx, gamma)
         categorized += n

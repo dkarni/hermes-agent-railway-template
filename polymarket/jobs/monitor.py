@@ -43,6 +43,9 @@ from ..jobs.common import (
 from ..jobs.runner import JobContext
 
 
+MAX_SIGNAL_AGE_SECONDS = 900
+
+
 async def run_monitor(
     ctx: JobContext,
     config: Config,
@@ -69,8 +72,16 @@ async def run_monitor(
         )
         ctx.read(len(trades))
         newest_ts = cursor_ts or 0
+        # Cold-start guard: trades older than the max signal age are backlog
+        # (ingest-to-promotion gap), not live detections — a copy decision on
+        # an hours-old trade is meaningless (production p50 delay was 6.3h).
+        # They advance the cursor but never become observed signals.
+        signal_cutoff = now_ts() - MAX_SIGNAL_AGE_SECONDS
         for trade in sorted(trades, key=lambda t: t.timestamp):
             newest_ts = max(newest_ts, trade.timestamp)
+            if trade.timestamp < signal_cutoff:
+                ctx.skipped()
+                continue
             observed_id = await _dedupe_observed(ctx, wallet, trade)
             if observed_id is None:
                 ctx.skipped()
