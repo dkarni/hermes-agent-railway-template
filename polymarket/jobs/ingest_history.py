@@ -178,7 +178,9 @@ async def _store_trades(ctx: JobContext, wallet: str, trades: list[WalletTrade])
                 None,
                 ctx.job_run_id,
                 now,
-                json.dumps(t.raw, separators=(",", ":")),
+                # Bulk 30d history is re-fetchable public data; storing every
+                # raw payload bloated the DB by ~1GB (retention period: zero).
+                None,
             ),
         )
         if cursor.rowcount:

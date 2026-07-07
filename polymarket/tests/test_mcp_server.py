@@ -56,7 +56,7 @@ def test_action_allowlist_matches_prd():
                 if isinstance(target, ast.Name) and target.id == "ACTION_NAMES":
                     found = {el.value for el in node.value.elts}
     assert found == {
-        "scan-leaderboard", "ingest-history", "run-monitor", "profile-wallets",
+        "scan-leaderboard", "ingest-history", "run-monitor", "profile-wallets", "resolve-markets",
         "reconcile-trades", "update-pnl", "review-outcomes", "evaluate-rules",
         "generate-report", "generate-weekly-report", "health-check", "reset-portfolio",
     }

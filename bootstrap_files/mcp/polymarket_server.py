@@ -38,7 +38,7 @@ API_URL = os.environ.get("POLY_API_URL", "http://127.0.0.1:8700").rstrip("/")
 
 # Allowlisted operator action names (PRD sec 19.2). No other action is callable.
 ACTION_NAMES = {
-    "scan-leaderboard", "ingest-history", "run-monitor", "profile-wallets",
+    "scan-leaderboard", "ingest-history", "run-monitor", "profile-wallets", "resolve-markets",
     "reconcile-trades", "update-pnl", "review-outcomes", "evaluate-rules",
     "generate-report", "generate-weekly-report", "health-check", "reset-portfolio",
 }

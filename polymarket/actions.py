@@ -27,6 +27,7 @@ ACTION_JOBS: dict[str, str] = {
     "run-monitor": "monitor",
     "profile-wallets": "profile_wallets",
     "reconcile-trades": "reconcile",
+    "resolve-markets": "resolve_markets",
     "update-pnl": "pnl",
     "review-outcomes": "reviews",
     "evaluate-rules": "rule_eval",
@@ -109,6 +110,10 @@ def _coro_for(action: str, config: Config):
             portfolio = await load_portfolio_view(ctx.conn)
             return await run_reconcile(ctx, config, dataapi, gamma, clob, portfolio=portfolio)
         return _reconcile
+    if action == "resolve-markets":
+        _, gamma, _ = _build_adapters(config)
+        from .jobs.resolve_markets import run_resolve_markets
+        return lambda ctx: run_resolve_markets(ctx, config, gamma)
     if action == "update-pnl":
         _, _, clob = _build_adapters(config)
         from .jobs.pnl import run_pnl

@@ -66,7 +66,7 @@ async def test_build_scheduler_registers_all_jobs(tmp_path):
         # Wave 2 + Wave 3: ~11 jobs total.
         assert names == {
             "leaderboard_scan", "ingest_history", "profile_wallets", "monitor",
-            "reconcile", "pnl", "reviews", "health", "daily_report",
+            "reconcile", "resolve_markets", "pnl", "reviews", "health", "daily_report",
             "weekly_report", "rule_eval",
         }
         await allow.aclose()

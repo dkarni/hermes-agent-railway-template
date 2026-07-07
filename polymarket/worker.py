@@ -113,6 +113,12 @@ def build_scheduler(conn, config: Config, *, client=None) -> Scheduler:
         _reconcile,
         every_seconds=900, stagger_seconds=45, jitter_seconds=15,
     )
+    from .jobs.resolve_markets import run_resolve_markets
+    scheduler.register(
+        "resolve_markets",
+        lambda ctx: run_resolve_markets(ctx, config, gamma),
+        every_seconds=900, stagger_seconds=90, jitter_seconds=15,
+    )
     # Wave 3 jobs.
     scheduler.register(
         "pnl",

@@ -249,6 +249,7 @@ def create_app(
         Route(f"{api}/actions/run-monitor", _action_handler("run-monitor"), methods=["POST"]),
         Route(f"{api}/actions/profile-wallets", _action_handler("profile-wallets"), methods=["POST"]),
         Route(f"{api}/actions/reconcile-trades", _action_handler("reconcile-trades"), methods=["POST"]),
+        Route(f"{api}/actions/resolve-markets", _action_handler("resolve-markets"), methods=["POST"]),
         Route(f"{api}/actions/update-pnl", _action_handler("update-pnl"), methods=["POST"]),
         Route(f"{api}/actions/review-outcomes", _action_handler("review-outcomes"), methods=["POST"]),
         Route(f"{api}/actions/evaluate-rules", _action_handler("evaluate-rules"), methods=["POST"]),
