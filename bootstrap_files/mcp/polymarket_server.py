@@ -38,8 +38,9 @@ API_URL = os.environ.get("POLY_API_URL", "http://127.0.0.1:8700").rstrip("/")
 
 # Allowlisted operator action names (PRD sec 19.2). No other action is callable.
 ACTION_NAMES = {
-    "scan-leaderboard", "profile-wallets", "reconcile-trades", "update-pnl",
-    "review-outcomes", "evaluate-rules", "generate-report", "reset-portfolio",
+    "scan-leaderboard", "ingest-history", "run-monitor", "profile-wallets",
+    "reconcile-trades", "update-pnl", "review-outcomes", "evaluate-rules",
+    "generate-report", "generate-weekly-report", "health-check", "reset-portfolio",
 }
 
 mcp = FastMCP("polymarket")
@@ -160,8 +161,10 @@ def poly_job_runs(limit: int = 20) -> dict:
 @mcp.tool()
 def poly_run_job(name: str) -> dict:
     """Trigger a deterministic operator job by name. Allowed names: scan-leaderboard,
-    profile-wallets, reconcile-trades, update-pnl, review-outcomes, evaluate-rules,
-    generate-report, reset-portfolio. Returns a job_run_id (or a 409 if already
+    ingest-history (pull 30d history for pending wallets), run-monitor (one poll
+    pass over tracked wallets), profile-wallets, reconcile-trades, update-pnl,
+    review-outcomes, evaluate-rules, generate-report, generate-weekly-report,
+    health-check, reset-portfolio. Returns a job_run_id (or a 409 if already
     running). Never places real orders — paper mode only."""
     if name not in ACTION_NAMES:
         raise RuntimeError(f"unknown job '{name}'. Allowed: {sorted(ACTION_NAMES)}")

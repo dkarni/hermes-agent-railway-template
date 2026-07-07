@@ -136,3 +136,13 @@ def test_tracked_limit_cap_by_rank():
     assert len(tracked) == 2
     assert set(tracked) == {"0x0", "0x1"}  # highest scores
     assert all(result[w][1] == "tracked_wallet_limit_reached" for w in watched)
+
+
+def test_partial_scan_blocks_promotion():
+    """PRD 11.7: a wallet whose latest leaderboard appearance came from a
+    partial scan must not be promoted or downgraded (stays insufficient_data)."""
+    trades, resolved = _many_trades(14, 1)  # would otherwise be track/watch
+    s = compute_wallet_stats(trades, resolved, window_days=30, window_end_ts=1200)
+    sc = scoring.score_wallet(s, _payload(), from_partial_scan=True)
+    assert sc.status == scoring.STATUS_INSUFFICIENT
+    assert sc.status_reason_code == "partial_or_stale_no_promotion"

@@ -176,7 +176,8 @@ def _migrations_dir():
 
 @pytest.mark.asyncio
 async def test_e2e_leaderboard_to_decision(tmp_path):
-    config = load_config({"POLY_DATA_DIR": str(tmp_path), "TRADING_MODE": "paper"})
+    config = load_config({"POLY_DATA_DIR": str(tmp_path), "TRADING_MODE": "paper",
+                          "LEADERBOARD_WALLET_LIMIT": "1"})  # mock serves 1 wallet/scan: complete, not partial
     conn = await dbmod.init_db(str(tmp_path / "poly.db"), _migrations_dir())
     state = _State()
     client = AllowlistClient(config.allowed_hosts(), transport=_make_transport(state))

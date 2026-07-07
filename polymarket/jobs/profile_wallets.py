@@ -67,7 +67,7 @@ async def run_profile_wallets(
         score = scoring.score_wallet(
             stats, payload,
             history_complete=complete,
-            from_partial_scan=False,
+            from_partial_scan=await _latest_scan_partial(ctx.conn, wallet),
             profile_stale=False,
         )
         computed[wallet] = (stats, score)
@@ -311,3 +311,19 @@ def _category_score(cs, stats: WalletStats, payload: dict) -> Decimal:
 
 def _iso_from_ts(ts: int) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+
+
+async def _latest_scan_partial(conn, wallet: str) -> bool:
+    """True when the wallet's most recent leaderboard appearance came from a
+    partial scan (PRD 11.7: no promotion/downgrade from partial scans)."""
+    cur = await conn.execute(
+        """
+        SELECT ls.is_partial FROM leaderboard_entries le
+        JOIN leaderboard_scans ls ON ls.id = le.leaderboard_scan_id
+        WHERE le.wallet_address = ?
+        ORDER BY ls.scanned_at DESC LIMIT 1
+        """,
+        (wallet,),
+    )
+    row = await cur.fetchone()
+    return bool(row[0]) if row else False

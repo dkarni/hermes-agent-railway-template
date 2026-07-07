@@ -129,9 +129,14 @@ async def run_ingest_history(
 
 
 async def _pending_wallets(conn: aiosqlite.Connection, *, limit: int | None) -> list[str]:
+    # Priority: best (lowest) leaderboard rank first, so the first batches
+    # after a scan ingest the top-ranked wallets, not set-iteration order.
     sql = (
-        "SELECT wallet_address FROM wallet_profiles "
-        "WHERE history_complete = 0 ORDER BY first_seen_at IS NULL, first_seen_at"
+        "SELECT wp.wallet_address, "
+        "       (SELECT MIN(le.rank) FROM leaderboard_entries le "
+        "         WHERE le.wallet_address = wp.wallet_address) AS best_rank "
+        "FROM wallet_profiles wp WHERE wp.history_complete = 0 "
+        "ORDER BY best_rank IS NULL, best_rank, wp.first_seen_at IS NULL, wp.first_seen_at"
     )
     if limit is not None:
         sql += f" LIMIT {int(limit)}"
