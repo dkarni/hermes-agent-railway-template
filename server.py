@@ -463,6 +463,7 @@ polymarket_gateway = ManagedProcess(
 
 # Shared client for the polymarket worker proxy (loopback, sane timeout).
 poly_http = httpx.AsyncClient(timeout=30.0)
+POLY_PROXY_RETRY_DELAYS = (0.15, 0.35, 0.75, 1.25)
 
 
 async def poly_proxy(request: Request):
@@ -478,15 +479,24 @@ async def poly_proxy(request: Request):
     headers = {}
     if "content-type" in request.headers:
         headers["content-type"] = request.headers["content-type"]
-    try:
-        upstream = await poly_http.request(
-            request.method, url, content=body, headers=headers,
-        )
-    except httpx.RequestError as exc:
-        return JSONResponse(
-            {"error": "polymarket worker unavailable", "detail": str(exc)},
-            status_code=502,
-        )
+    for attempt in range(len(POLY_PROXY_RETRY_DELAYS) + 1):
+        try:
+            upstream = await poly_http.request(
+                request.method, url, content=body, headers=headers,
+            )
+            break
+        except httpx.RequestError as exc:
+            if attempt >= len(POLY_PROXY_RETRY_DELAYS):
+                detail = str(exc) or type(exc).__name__
+                return JSONResponse(
+                    {
+                        "error": "polymarket worker unavailable",
+                        "detail": detail,
+                        "worker_state": poly_worker.state,
+                    },
+                    status_code=502,
+                )
+            await asyncio.sleep(POLY_PROXY_RETRY_DELAYS[attempt])
     return Response(
         upstream.content,
         status_code=upstream.status_code,
