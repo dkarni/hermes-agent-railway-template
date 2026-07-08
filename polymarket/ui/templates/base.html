@@ -8,7 +8,6 @@
   <link rel="apple-touch-icon" href="/polymarket/static/apple-touch-icon.png">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwind.config = { darkMode: 'class' }</script>
-  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <style>
     :root {
@@ -247,69 +246,72 @@
     .table-note { color:var(--muted); font-size:0.78rem; }
     .empty-note { color:var(--faint); font-size:0.85rem; }
     .soft-divider { border-top:1px solid var(--border-soft); }
-    .chart-canvas-wrap {
-      position:relative;
-      height:15.25rem;
-      min-width:0;
+    [x-cloak] { display:none !important; }
+    .chart-shell {
+      display:grid;
+      grid-template-columns:4.75rem minmax(0,1fr);
+      grid-template-rows:auto auto;
+      gap:0.45rem 0.75rem;
+      align-items:stretch;
     }
-    .chart-canvas-wrap canvas { width:100% !important; height:100% !important; }
-    .chart-range-row {
+    .chart-y-axis {
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+      min-height:148px;
+      padding:0.15rem 0;
+      color:var(--faint);
+      font-size:0.72rem;
+      font-variant-numeric:tabular-nums;
+      font-family:"SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    .chart-plot {
+      position:relative;
+      min-width:0;
+      min-height:148px;
+    }
+    .chart-grid-line {
+      stroke:rgba(140,150,168,0.18);
+      stroke-width:1;
+      vector-effect:non-scaling-stroke;
+    }
+    .chart-hit {
+      fill:transparent;
+      stroke:transparent;
+      pointer-events:all;
+      cursor:crosshair;
+      outline:none;
+    }
+    .chart-hit:hover,
+    .chart-hit:focus {
+      stroke:rgba(99,230,255,0.95);
+      stroke-width:2;
+      vector-effect:non-scaling-stroke;
+    }
+    .chart-tooltip {
+      position:absolute;
+      transform:translate(-50%, calc(-100% - 0.75rem));
+      min-width:8.5rem;
+      max-width:14rem;
+      pointer-events:none;
+      z-index:15;
+      padding:0.55rem 0.65rem;
+      border-radius:0.45rem;
+      border:1px solid var(--border);
+      background:rgba(13,17,24,0.98);
+      color:#eef7ff;
+      box-shadow:0 18px 44px rgba(0,0,0,0.32);
+    }
+    .chart-x-axis {
+      grid-column:2;
       display:flex;
       justify-content:space-between;
       gap:1rem;
-      margin-top:0.45rem;
       color:var(--faint);
       font-size:0.72rem;
       font-variant-numeric:tabular-nums;
       font-family:"SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
-    .chart-value-strip {
-      display:flex;
-      flex-wrap:wrap;
-      gap:0.9rem;
-      color:var(--faint);
-      font-size:0.72rem;
-      font-variant-numeric:tabular-nums;
-      font-family:"SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    }
-    .chart-value-strip b { color:#dce5ef; font-weight:650; }
-    .portfolio-bar {
-      display:flex;
-      width:100%;
-      height:0.78rem;
-      overflow:hidden;
-      border-radius:999px;
-      background:rgba(16,23,34,0.82);
-      border:1px solid var(--border-soft);
-    }
-    .portfolio-bar-cash {
-      background:linear-gradient(90deg, rgba(99,230,255,0.92), rgba(99,230,255,0.62));
-      min-width:0;
-      transition:width .18s ease;
-    }
-    .portfolio-bar-open {
-      background:linear-gradient(90deg, rgba(139,92,246,0.82), rgba(139,92,246,0.54));
-      min-width:0;
-      transition:width .18s ease;
-    }
-    .portfolio-split-row {
-      display:flex;
-      align-items:center;
-      gap:0.75rem;
-      padding:0.85rem;
-      border:1px solid var(--border-soft);
-      border-radius:0.55rem;
-      background:rgba(16,23,34,0.45);
-    }
-    .portfolio-dot {
-      width:0.72rem;
-      height:0.72rem;
-      border-radius:999px;
-      flex:none;
-      box-shadow:0 0 18px rgba(99,230,255,0.2);
-    }
-    .portfolio-dot-cash { background:var(--cyan); }
-    .portfolio-dot-open { background:var(--violet); }
     .mono { font-variant-numeric:tabular-nums; font-family:"SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
     .muted { color:var(--muted); }
   </style>
@@ -378,74 +380,5 @@
   <footer class="app-shell py-6 text-xs" style="color:var(--faint);">
     Paper-trading research only. No orders are ever placed. Money marked wallet comes from the original wallet history; paper sim is Hermes' simulation.
   </footer>
-  <script>
-    window.renderHermesEquityChart = function(canvasId, labels, values) {
-      const canvas = document.getElementById(canvasId);
-      if (!canvas || !window.Chart || !labels.length || !values.length) return;
-      const ctx = canvas.getContext('2d');
-      const wrap = canvas.closest('.chart-canvas-wrap') || canvas;
-      const gradient = ctx.createLinearGradient(0, 0, 0, wrap.clientHeight || 240);
-      gradient.addColorStop(0, 'rgba(99, 230, 255, 0.26)');
-      gradient.addColorStop(0.62, 'rgba(99, 230, 255, 0.08)');
-      gradient.addColorStop(1, 'rgba(99, 230, 255, 0)');
-      const money = new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        maximumFractionDigits: 2
-      });
-      return new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [{
-            data: values,
-            borderColor: '#63e6ff',
-            backgroundColor: gradient,
-            borderWidth: 2.5,
-            fill: true,
-            tension: 0.38,
-            pointRadius: (context) => context.dataIndex === values.length - 1 ? 4 : 0,
-            pointHoverRadius: 5,
-            pointBackgroundColor: '#63e6ff',
-            pointBorderColor: 'rgba(183, 244, 255, 0.88)',
-            pointBorderWidth: 2
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { mode: 'index', intersect: false },
-          animation: { duration: 450 },
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              displayColors: false,
-              padding: 10,
-              backgroundColor: 'rgba(13, 17, 24, 0.98)',
-              borderColor: 'rgba(32, 40, 56, 1)',
-              borderWidth: 1,
-              titleColor: '#8c96a8',
-              bodyColor: '#eef7ff',
-              callbacks: {
-                label: (context) => 'Equity ' + money.format(Number(context.raw || 0))
-              }
-            }
-          },
-          scales: {
-            x: {
-              grid: { display: false },
-              border: { color: 'rgba(140, 150, 168, 0.24)' },
-              ticks: { color: '#8c96a8', maxTicksLimit: 7, maxRotation: 0, autoSkip: true }
-            },
-            y: {
-              border: { color: 'rgba(140, 150, 168, 0.24)' },
-              grid: { color: 'rgba(140, 150, 168, 0.14)', drawTicks: false },
-              ticks: { color: '#8c96a8', callback: (value) => money.format(Number(value)) }
-            }
-          }
-        }
-      });
-    };
-  </script>
 </body>
 </html>

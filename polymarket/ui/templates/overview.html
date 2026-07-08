@@ -5,23 +5,9 @@
 <div x-data="{}" x-init="setInterval(async () => {
       const moneyText = (v) => (v === null || v === undefined || v === '') ? '-' :
         new Intl.NumberFormat('en-US', { style:'currency', currency:'USD' }).format(Number(v));
-      const pctText = (v) => `${Number(v || 0).toFixed(1)}%`;
-      const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
-      const setWidth = (id, value) => { const el = document.getElementById(id); if (el) el.style.width = `${Math.max(0, Math.min(100, value || 0))}%`; };
       try { const r = await fetch('/api/polymarket/overview'); if(r.ok){ const d = await r.json();
-        const total = Number(d.equity_usd || d.cash_usd || 0);
-        const cash = Number(d.cash_usd || 0);
-        const openValue = Math.max(total - cash, 0);
-        const cashPct = total > 0 ? (cash / total) * 100 : 0;
-        const openPct = total > 0 ? (openValue / total) * 100 : 0;
-        setText('ov-equity', moneyText(total));
-        setText('ov-cash-value', moneyText(cash));
-        setText('ov-open-value', moneyText(openValue));
-        setText('ov-cash-pct', pctText(cashPct));
-        setText('ov-open-pct', pctText(openPct));
-        setWidth('ov-cash-bar', cashPct);
-        setWidth('ov-open-bar', openPct);
-        setText('ov-today', moneyText(d.today_pnl_usd)); } }
+        document.getElementById('ov-equity').textContent = moneyText(d.equity_usd);
+        document.getElementById('ov-today').textContent = moneyText(d.today_pnl_usd); } }
       catch(e){}
     }, 60000)">
 
@@ -91,48 +77,15 @@
     </div>
   </div>
 
-  <div class="card p-5 mb-5">
-    {% if o.portfolio_split.empty %}
-      <div class="empty-note">Portfolio value is not available yet.</div>
-    {% else %}
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div class="text-xs uppercase font-semibold tracking-normal" style="color:var(--muted);">Total portfolio value {{ help('Cash plus the current marked value of open paper positions. This is the paper account value, not realized profit.') }}</div>
-          <div id="ov-equity" class="text-3xl font-semibold mono mt-2">{{ o.portfolio_split.total_label }}</div>
-          <div class="text-xs mt-1" style="color:var(--faint);">Cash + current value of {{ o.open_positions }} open paper position{{ '' if o.open_positions == 1 else 's' }}.</div>
-        </div>
-        <a href="/polymarket/paper-trades?status=open" class="badge">{{ o.open_positions }} open</a>
-      </div>
-
-      <div class="portfolio-bar mt-5" aria-label="Portfolio split between cash and open positions">
-        <div id="ov-cash-bar" class="portfolio-bar-cash" style="width:{{ o.portfolio_split.cash_pct }}%"></div>
-        <div id="ov-open-bar" class="portfolio-bar-open" style="width:{{ o.portfolio_split.open_pct }}%"></div>
-      </div>
-      <div class="grid md:grid-cols-2 gap-3 mt-4">
-        <div class="portfolio-split-row">
-          <span class="portfolio-dot portfolio-dot-cash"></span>
-          <div>
-            <div class="text-sm font-semibold">Cash available</div>
-            <div class="text-xs" style="color:var(--faint);">Uninvested paper cash for future copies.</div>
-          </div>
-          <div class="ml-auto text-right">
-            <div id="ov-cash-value" class="mono text-sm font-semibold">{{ o.portfolio_split.cash_label }}</div>
-            <div id="ov-cash-pct" class="text-xs" style="color:var(--faint);">{{ o.portfolio_split.cash_pct_label }}</div>
-          </div>
-        </div>
-        <div class="portfolio-split-row">
-          <span class="portfolio-dot portfolio-dot-open"></span>
-          <div>
-            <div class="text-sm font-semibold">Open positions value</div>
-            <div class="text-xs" style="color:var(--faint);">Current marked value of open paper positions.</div>
-          </div>
-          <div class="ml-auto text-right">
-            <div id="ov-open-value" class="mono text-sm font-semibold">{{ o.portfolio_split.open_value_label }}</div>
-            <div id="ov-open-pct" class="text-xs" style="color:var(--faint);">{{ o.portfolio_split.open_pct_label }}</div>
-          </div>
-        </div>
-      </div>
-    {% endif %}
+  <div class="grid sm:grid-cols-2 gap-3 mb-5">
+    <div class="metric-card p-4">
+      <div class="text-xs muted">Paper equity {{ help('Total simulated account value: cash plus the current value of open paper positions.') }}</div>
+      <div id="ov-equity" class="text-xl font-semibold mono mt-1">{{ o.equity_usd | money_amount if o.equity_usd else '-' }}</div>
+    </div>
+    <div class="metric-card p-4">
+      <div class="text-xs muted">Cash {{ help('Unused simulated cash available for future paper copies. Cash drops when a paper position opens.') }}</div>
+      <div class="text-xl font-semibold mono mt-1">{{ o.cash_usd | money_amount if o.cash_usd else '-' }}</div>
+    </div>
   </div>
 
   <div class="grid md:grid-cols-3 gap-4">
@@ -142,37 +95,57 @@
           <div class="text-sm font-semibold">Paper equity over time</div>
           <div class="text-xs mt-1" style="color:var(--faint);">Hover the line to see time and account value.</div>
         </div>
-        {% if not o.equity_chart.empty %}
+        {% if not o.sparkline.empty %}
         <div class="text-right">
           <div class="text-xs" style="color:var(--faint);">Latest equity</div>
-          <div class="mono text-sm font-semibold">{{ o.equity_chart.last_label }}</div>
+          <div class="mono text-sm font-semibold">{{ o.sparkline.last_label }}</div>
         </div>
         {% endif %}
       </div>
-      {% if o.equity_chart.empty %}
+      {% if o.sparkline.empty %}
         <div class="empty-note">No PnL snapshots yet.</div>
       {% else %}
-        <div class="chart-value-strip mb-2">
-          <span>min <b>{{ o.equity_chart.min_label }}</b></span>
-          <span>mid <b>{{ o.equity_chart.mid_label }}</b></span>
-          <span>max <b>{{ o.equity_chart.max_label }}</b></span>
+        <div class="chart-shell" x-data="{ tip: null }">
+          <div class="chart-y-axis" aria-hidden="true">
+            <span>{{ o.sparkline.max_label }}</span>
+            <span>{{ o.sparkline.mid_label }}</span>
+            <span>{{ o.sparkline.min_label }}</span>
+          </div>
+          <div class="chart-plot" @mouseleave="tip = null">
+            <svg viewBox="0 0 {{ o.sparkline.width }} {{ o.sparkline.height }}" width="100%" height="148" preserveAspectRatio="none" role="img" aria-label="Paper equity over time">
+              <defs>
+                <linearGradient id="overviewEquityFill" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="#63e6ff" stop-opacity="0.16"/>
+                  <stop offset="100%" stop-color="#63e6ff" stop-opacity="0"/>
+                </linearGradient>
+                <filter id="overviewEquityGlow" x="-10%" y="-40%" width="120%" height="180%">
+                  <feGaussianBlur stdDeviation="1.8" result="blur"/>
+                  <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+              </defs>
+              <line x1="0" x2="{{ o.sparkline.width }}" y1="8" y2="8" class="chart-grid-line"/>
+              <line x1="0" x2="{{ o.sparkline.width }}" y1="{{ o.sparkline.height / 2 }}" y2="{{ o.sparkline.height / 2 }}" class="chart-grid-line"/>
+              <line x1="0" x2="{{ o.sparkline.width }}" y1="{{ o.sparkline.height - 8 }}" y2="{{ o.sparkline.height - 8 }}" class="chart-grid-line"/>
+              <path d="{{ o.sparkline.area_path }}" fill="url(#overviewEquityFill)"/>
+              <path d="{{ o.sparkline.path }}" fill="none" stroke="#63e6ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" filter="url(#overviewEquityGlow)"/>
+              {% for point in o.sparkline.points %}
+              <circle class="chart-hit"
+                      cx="{{ point.x }}" cy="{{ point.y }}" r="8"
+                      tabindex="0"
+                      @mouseenter="tip = { x: '{{ point.x_pct }}', y: '{{ point.y_pct }}', value: {{ point.equity_label | tojson }}, time: {{ point.time_label | tojson }} }"
+                      @focus="tip = { x: '{{ point.x_pct }}', y: '{{ point.y_pct }}', value: {{ point.equity_label | tojson }}, time: {{ point.time_label | tojson }} }"></circle>
+              {% endfor %}
+            </svg>
+            <div x-cloak x-show="tip" class="chart-tooltip" :style="'left:' + tip.x + '%; top:' + tip.y + '%'">
+              <div class="mono text-sm" x-text="tip.value"></div>
+              <div class="text-xs mt-1" style="color:var(--muted);" x-text="tip.time"></div>
+            </div>
+          </div>
+          <div class="chart-x-axis">
+            <span>{{ o.sparkline.start_label }}</span>
+            <span>{{ o.sparkline.end_label }}</span>
+          </div>
         </div>
-        <div class="chart-canvas-wrap">
-          <canvas id="overview-equity-chart" aria-label="Paper equity over time"></canvas>
-        </div>
-        <div class="chart-range-row">
-          <span>{{ o.equity_chart.start_label }}</span>
-          <span>{{ o.equity_chart.end_label }}</span>
-        </div>
-        <script>
-          window.addEventListener('load', () => {
-            window.renderHermesEquityChart(
-              'overview-equity-chart',
-              {{ o.equity_chart.labels | tojson }},
-              {{ o.equity_chart.values | tojson }}
-            );
-          });
-        </script>
       {% endif %}
     </div>
 
