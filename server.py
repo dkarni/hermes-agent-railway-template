@@ -44,6 +44,12 @@ MARCO_PROFILE_HOME = Path(HERMES_HOME) / "profiles" / "marco"
 MARCO_ENV_PATHS = (MARCO_PROFILE_HOME / ".env", MARCO_PROFILE_HOME / "hermes.env")
 MAX_PROFILE_HOME = Path(HERMES_HOME) / "profiles" / "max"
 MAX_ENV_PATHS = (MAX_PROFILE_HOME / ".env", MAX_PROFILE_HOME / "hermes.env")
+POLYMARKET_PROFILE_HOME = Path(HERMES_HOME) / "profiles" / "polymarket"
+POLYMARKET_ENV_PATHS = (POLYMARKET_PROFILE_HOME / ".env", POLYMARKET_PROFILE_HOME / "hermes.env")
+POLY_WORKER_URL = os.environ.get("POLY_WORKER_URL", "http://127.0.0.1:8700").rstrip("/")
+# Bearer token for a REMOTE poly worker (standalone Railway service). Unset when
+# the worker is loopback in this container (proxy targets 127.0.0.1, no auth).
+POLY_API_TOKEN = os.environ.get("POLY_API_TOKEN", "").strip()
 MARCO_17TRACK_BRIDGE_URL = os.environ.get("MARCO_17TRACK_BRIDGE_URL", "http://127.0.0.1:8654").rstrip("/")
 
 # Registry of known Hermes env vars exposed in the UI.
@@ -231,11 +237,18 @@ class GatewayManager:
         try:
             env = os.environ.copy()
             env["HERMES_HOME"] = HERMES_HOME
+            # Upstream supervised-slot convention (see hermes s6 run-script):
+            # the sentinel pins this bare gateway to the root/default profile.
+            # Without it, hermes follows the sticky active_profile file and
+            # silently redirects the default gateway into a named profile,
+            # dueling with that profile's real gateway. run --replace is the
+            # matching takeover mode so stale volume locks never wedge startup.
+            env["HERMES_S6_SUPERVISED_CHILD"] = "1"
             env_vars = read_env_file(ENV_FILE_PATH)
             env.update(env_vars)
 
             self.process = await asyncio.create_subprocess_exec(
-                "hermes", "gateway",
+                "hermes", "gateway", "run", "--replace",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 env=env,
@@ -244,6 +257,7 @@ class GatewayManager:
             self.start_time = time.time()
             task = asyncio.create_task(self._read_output())
             self._read_tasks.append(task)
+            self._read_tasks.append(asyncio.create_task(self._watch_exit(self.process)))
         except Exception as e:
             self.state = "error"
             self.logs.append(f"Failed to start gateway: {e}")
@@ -281,6 +295,21 @@ class GatewayManager:
         if self.process and self.process.returncode is not None and self.state == "running":
             self.state = "error"
             self.logs.append(f"Gateway exited with code {self.process.returncode}")
+
+    async def _watch_exit(self, process: asyncio.subprocess.Process):
+        # Self-heal like ManagedProcess: an unexpected exit (crash, manual
+        # `hermes gateway restart` from a shell, --replace duel) restarts the
+        # supervised child instead of leaving a stale "running"/"error" state.
+        code = await process.wait()
+        if self.state in ("stopping", "stopped") or self.process is not process:
+            return
+        self.state = "error"
+        self.logs.append(f"Gateway exited unexpectedly (code {code}); restarting in 5s")
+        await asyncio.sleep(5)
+        if self.state in ("stopping", "stopped") or self.process is not process:
+            return
+        self.restart_count += 1
+        await self.start()
 
     def get_status(self) -> dict:
         pid = None
@@ -401,6 +430,7 @@ class ManagedProcess:
 marco_gateway = ManagedProcess(
     "marco gateway",
     ["hermes", "-p", "marco", "gateway", "run", "--replace"],
+    env_overrides={"HERMES_S6_SUPERVISED_CHILD": "1"},
     env_paths=MARCO_ENV_PATHS,
 )
 track_bridge = ManagedProcess(
@@ -419,8 +449,60 @@ track_bridge = ManagedProcess(
 max_gateway = ManagedProcess(
     "max gateway",
     ["hermes", "-p", "max", "gateway", "run", "--replace"],
+    env_overrides={"HERMES_S6_SUPERVISED_CHILD": "1"},
     env_paths=MAX_ENV_PATHS,
 )
+polymarket_gateway = ManagedProcess(
+    "polymarket gateway",
+    ["hermes", "-p", "polymarket", "gateway", "run", "--replace"],
+    env_overrides={"HERMES_S6_SUPERVISED_CHILD": "1"},
+    env_paths=POLYMARKET_ENV_PATHS,
+)
+
+# Shared client for the Poly worker proxy (remote service at POLY_WORKER_URL).
+poly_http = httpx.AsyncClient(timeout=30.0)
+POLY_PROXY_RETRY_DELAYS = (0.15, 0.35, 0.75, 1.25)
+
+
+async def poly_proxy(request: Request):
+    # require_auth FIRST: the worker is loopback-only, this is the auth boundary.
+    auth_err = require_auth(request)
+    if auth_err:
+        return auth_err
+    path = request.url.path
+    url = f"{POLY_WORKER_URL}{path}"
+    if request.url.query:
+        url = f"{url}?{request.url.query}"
+    body = await request.body()
+    headers = {}
+    if "content-type" in request.headers:
+        headers["content-type"] = request.headers["content-type"]
+    # Authenticate to a remote worker; loopback worker ignores it (no auth mounted).
+    if POLY_API_TOKEN:
+        headers["Authorization"] = f"Bearer {POLY_API_TOKEN}"
+    for attempt in range(len(POLY_PROXY_RETRY_DELAYS) + 1):
+        try:
+            upstream = await poly_http.request(
+                request.method, url, content=body, headers=headers,
+            )
+            break
+        except httpx.RequestError as exc:
+            if attempt >= len(POLY_PROXY_RETRY_DELAYS):
+                detail = str(exc) or type(exc).__name__
+                return JSONResponse(
+                    {
+                        "error": "polymarket worker unavailable",
+                        "detail": detail,
+                        "worker_url": POLY_WORKER_URL,
+                    },
+                    status_code=502,
+                )
+            await asyncio.sleep(POLY_PROXY_RETRY_DELAYS[attempt])
+    return Response(
+        upstream.content,
+        status_code=upstream.status_code,
+        media_type=upstream.headers.get("content-type", "application/json"),
+    )
 
 
 async def public_17track_proxy(request: Request):
@@ -463,6 +545,7 @@ async def health(request: Request):
         "marco_gateway": marco_gateway.state,
         "track_bridge": track_bridge.state,
         "max_gateway": max_gateway.state,
+        "polymarket_gateway": polymarket_gateway.state,
     })
 
 
@@ -720,6 +803,11 @@ async def auto_start_gateway():
 
 routes = [
     Route("/17track/{token:path}", public_17track_proxy, methods=["POST"]),
+    # Polymarket research: proxy to the standalone Poly worker service
+    # (POLY_WORKER_URL). Basic-auth enforced here; bearer token added downstream.
+    Route("/polymarket", poly_proxy, methods=["GET", "POST"]),
+    Route("/polymarket/{path:path}", poly_proxy, methods=["GET", "POST"]),
+    Route("/api/polymarket/{path:path}", poly_proxy, methods=["GET", "POST"]),
     Route("/", homepage),
     Route("/health", health),
     Route("/api/config", api_config_get, methods=["GET"]),
@@ -745,7 +833,10 @@ async def lifespan(app):
         asyncio.create_task(track_bridge.start())
     if (MAX_PROFILE_HOME / "config.yaml").exists():
         asyncio.create_task(max_gateway.start())
+    if (POLYMARKET_PROFILE_HOME / "config.yaml").exists():
+        asyncio.create_task(polymarket_gateway.start())
     yield
+    await polymarket_gateway.stop()
     await max_gateway.stop()
     await track_bridge.stop()
     await marco_gateway.stop()

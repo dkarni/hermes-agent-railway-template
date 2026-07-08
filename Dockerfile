@@ -19,8 +19,15 @@ RUN node --version && npm --version
 # Browser automation for Hermes browser tool (Browserbase + local headless)
 RUN npm install -g agent-browser && agent-browser --version
 
-RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent.git /tmp/hermes-agent && \
-    cd /tmp/hermes-agent && \
+# Pin hermes-agent to a specific commit so rebuilds are reproducible and can be
+# rolled back. Bump HERMES_REF to update. 22c5048d (2026-07-03) includes the
+# Telegram streamed-reply overflow/continuation and rich-format fixes.
+ARG HERMES_REF=22c5048d9c6a3d6e3d6c786ef014a0998ca2a0c3
+RUN mkdir -p /tmp/hermes-agent && cd /tmp/hermes-agent && \
+    git init -q && \
+    git remote add origin https://github.com/NousResearch/hermes-agent.git && \
+    git fetch --depth 1 origin "${HERMES_REF}" && \
+    git checkout -q FETCH_HEAD && \
     uv pip install --system --no-cache -e ".[all]" && \
     rm -rf /tmp/hermes-agent/.git
 
@@ -34,6 +41,7 @@ COPY templates/ /app/templates/
 COPY start.sh /app/start.sh
 COPY bootstrap_marco.py /app/bootstrap_marco.py
 COPY bootstrap_max.py /app/bootstrap_max.py
+COPY bootstrap_poly.py /app/bootstrap_poly.py
 COPY bootstrap_files/ /app/bootstrap_files/
 RUN chmod +x /app/start.sh
 

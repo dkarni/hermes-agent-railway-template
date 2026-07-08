@@ -8,5 +8,6 @@ mkdir -p /data/.hermes/pairing
 
 python /app/bootstrap_marco.py
 python /app/bootstrap_max.py
+python /app/bootstrap_poly.py
 
 exec python /app/server.py
