@@ -246,6 +246,72 @@
     .table-note { color:var(--muted); font-size:0.78rem; }
     .empty-note { color:var(--faint); font-size:0.85rem; }
     .soft-divider { border-top:1px solid var(--border-soft); }
+    [x-cloak] { display:none !important; }
+    .chart-shell {
+      display:grid;
+      grid-template-columns:4.75rem minmax(0,1fr);
+      grid-template-rows:auto auto;
+      gap:0.45rem 0.75rem;
+      align-items:stretch;
+    }
+    .chart-y-axis {
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+      min-height:148px;
+      padding:0.15rem 0;
+      color:var(--faint);
+      font-size:0.72rem;
+      font-variant-numeric:tabular-nums;
+      font-family:"SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    .chart-plot {
+      position:relative;
+      min-width:0;
+      min-height:148px;
+    }
+    .chart-grid-line {
+      stroke:rgba(140,150,168,0.18);
+      stroke-width:1;
+      vector-effect:non-scaling-stroke;
+    }
+    .chart-hit {
+      fill:transparent;
+      stroke:transparent;
+      pointer-events:all;
+      cursor:crosshair;
+      outline:none;
+    }
+    .chart-hit:hover,
+    .chart-hit:focus {
+      stroke:rgba(99,230,255,0.95);
+      stroke-width:2;
+      vector-effect:non-scaling-stroke;
+    }
+    .chart-tooltip {
+      position:absolute;
+      transform:translate(-50%, calc(-100% - 0.75rem));
+      min-width:8.5rem;
+      max-width:14rem;
+      pointer-events:none;
+      z-index:15;
+      padding:0.55rem 0.65rem;
+      border-radius:0.45rem;
+      border:1px solid var(--border);
+      background:rgba(13,17,24,0.98);
+      color:#eef7ff;
+      box-shadow:0 18px 44px rgba(0,0,0,0.32);
+    }
+    .chart-x-axis {
+      grid-column:2;
+      display:flex;
+      justify-content:space-between;
+      gap:1rem;
+      color:var(--faint);
+      font-size:0.72rem;
+      font-variant-numeric:tabular-nums;
+      font-family:"SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
     .mono { font-variant-numeric:tabular-nums; font-family:"SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
     .muted { color:var(--muted); }
   </style>

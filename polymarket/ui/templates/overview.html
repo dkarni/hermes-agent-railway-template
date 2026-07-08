@@ -77,7 +77,7 @@
     </div>
   </div>
 
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+  <div class="grid sm:grid-cols-2 gap-3 mb-5">
     <div class="metric-card p-4">
       <div class="text-xs muted">Paper equity {{ help('Total simulated account value: cash plus the current value of open paper positions.') }}</div>
       <div id="ov-equity" class="text-xl font-semibold mono mt-1">{{ o.equity_usd | money_amount if o.equity_usd else '-' }}</div>
@@ -86,42 +86,66 @@
       <div class="text-xs muted">Cash {{ help('Unused simulated cash available for future paper copies. Cash drops when a paper position opens.') }}</div>
       <div class="text-xl font-semibold mono mt-1">{{ o.cash_usd | money_amount if o.cash_usd else '-' }}</div>
     </div>
-    <div class="metric-card p-4">
-      <div class="text-xs muted">Closed paper PnL</div>
-      <div class="text-xl font-semibold mono mt-1">{{ o.total_pnl_usd | money_amount if o.total_pnl_usd is not none else '-' }}</div>
-    </div>
-    <div class="metric-card p-4">
-      <div class="text-xs muted">Max drawdown {{ help('Largest paper-account drop from a previous high-water mark.') }}</div>
-      <div class="text-xl font-semibold mono mt-1">{{ o.max_drawdown_usd | money_amount if o.max_drawdown_usd is not none else '-' }}</div>
-    </div>
   </div>
 
   <div class="grid md:grid-cols-3 gap-4">
     <div class="card p-4 md:col-span-2">
       <div class="flex items-center justify-between gap-3 mb-4">
         <div>
-          <div class="text-sm font-semibold">Paper equity curve</div>
-          <div class="text-xs mt-1" style="color:var(--faint);">Soft view of the simulated account value over time.</div>
+          <div class="text-sm font-semibold">Paper equity over time</div>
+          <div class="text-xs mt-1" style="color:var(--faint);">Hover the line to see time and account value.</div>
         </div>
+        {% if not o.sparkline.empty %}
+        <div class="text-right">
+          <div class="text-xs" style="color:var(--faint);">Latest equity</div>
+          <div class="mono text-sm font-semibold">{{ o.sparkline.last_label }}</div>
+        </div>
+        {% endif %}
       </div>
       {% if o.sparkline.empty %}
         <div class="empty-note">No PnL snapshots yet.</div>
       {% else %}
-        <svg viewBox="0 0 {{ o.sparkline.width }} {{ o.sparkline.height }}" width="100%" height="124" preserveAspectRatio="none" role="img" aria-label="Paper equity curve">
-          <defs>
-            <linearGradient id="overviewEquityFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stop-color="#63e6ff" stop-opacity="0.18"/>
-              <stop offset="100%" stop-color="#63e6ff" stop-opacity="0"/>
-            </linearGradient>
-            <filter id="overviewEquityGlow" x="-10%" y="-40%" width="120%" height="180%">
-              <feGaussianBlur stdDeviation="2" result="blur"/>
-              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-            </filter>
-          </defs>
-          <path d="{{ o.sparkline.area_path }}" fill="url(#overviewEquityFill)"/>
-          <path d="{{ o.sparkline.path }}" fill="none" stroke="#63e6ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" filter="url(#overviewEquityGlow)"/>
-        </svg>
-        <div class="text-xs" style="color:var(--faint);">from {{ o.sparkline.first | money_amount }} to {{ o.sparkline.last | money_amount }}</div>
+        <div class="chart-shell" x-data="{ tip: null }">
+          <div class="chart-y-axis" aria-hidden="true">
+            <span>{{ o.sparkline.max_label }}</span>
+            <span>{{ o.sparkline.mid_label }}</span>
+            <span>{{ o.sparkline.min_label }}</span>
+          </div>
+          <div class="chart-plot" @mouseleave="tip = null">
+            <svg viewBox="0 0 {{ o.sparkline.width }} {{ o.sparkline.height }}" width="100%" height="148" preserveAspectRatio="none" role="img" aria-label="Paper equity over time">
+              <defs>
+                <linearGradient id="overviewEquityFill" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="#63e6ff" stop-opacity="0.16"/>
+                  <stop offset="100%" stop-color="#63e6ff" stop-opacity="0"/>
+                </linearGradient>
+                <filter id="overviewEquityGlow" x="-10%" y="-40%" width="120%" height="180%">
+                  <feGaussianBlur stdDeviation="1.8" result="blur"/>
+                  <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+              </defs>
+              <line x1="0" x2="{{ o.sparkline.width }}" y1="8" y2="8" class="chart-grid-line"/>
+              <line x1="0" x2="{{ o.sparkline.width }}" y1="{{ o.sparkline.height / 2 }}" y2="{{ o.sparkline.height / 2 }}" class="chart-grid-line"/>
+              <line x1="0" x2="{{ o.sparkline.width }}" y1="{{ o.sparkline.height - 8 }}" y2="{{ o.sparkline.height - 8 }}" class="chart-grid-line"/>
+              <path d="{{ o.sparkline.area_path }}" fill="url(#overviewEquityFill)"/>
+              <path d="{{ o.sparkline.path }}" fill="none" stroke="#63e6ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" filter="url(#overviewEquityGlow)"/>
+              {% for point in o.sparkline.points %}
+              <circle class="chart-hit"
+                      cx="{{ point.x }}" cy="{{ point.y }}" r="8"
+                      tabindex="0"
+                      @mouseenter="tip = { x: '{{ point.x_pct }}', y: '{{ point.y_pct }}', value: {{ point.equity_label | tojson }}, time: {{ point.time_label | tojson }} }"
+                      @focus="tip = { x: '{{ point.x_pct }}', y: '{{ point.y_pct }}', value: {{ point.equity_label | tojson }}, time: {{ point.time_label | tojson }} }"></circle>
+              {% endfor %}
+            </svg>
+            <div x-cloak x-show="tip" class="chart-tooltip" :style="'left:' + tip.x + '%; top:' + tip.y + '%'">
+              <div class="mono text-sm" x-text="tip.value"></div>
+              <div class="text-xs mt-1" style="color:var(--muted);" x-text="tip.time"></div>
+            </div>
+          </div>
+          <div class="chart-x-axis">
+            <span>{{ o.sparkline.start_label }}</span>
+            <span>{{ o.sparkline.end_label }}</span>
+          </div>
+        </div>
       {% endif %}
     </div>
 

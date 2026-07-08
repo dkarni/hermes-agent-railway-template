@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import os
 import re
-from math import sin, tau
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
@@ -138,7 +137,22 @@ _env.filters["calendar_time"] = _calendar_time
 _env.filters["money_amount"] = _money_amount
 
 
-def _sparkline(series: list[dict], *, width=520, height=60) -> dict:
+def _spark_time_label(value, tz: ZoneInfo | str | None) -> str:
+    dt = _parse_time(value)
+    if dt is None:
+        return "snapshot"
+    try:
+        zone = tz if isinstance(tz, ZoneInfo) else ZoneInfo(str(tz))
+    except Exception:
+        zone = ZoneInfo("UTC")
+    return dt.astimezone(zone).strftime("%b %-d, %H:%M")
+
+
+def _money_label(value: Decimal) -> str:
+    return f"${value:,.2f}"
+
+
+def _sparkline(series: list[dict], *, width=520, height=60, tz: ZoneInfo | str | None = None) -> dict:
     """Build inline-SVG sparkline geometry from an equity series (no chart lib)."""
     points = [s for s in series if s.get("equity_usd") is not None]
     if len(points) < 2:
@@ -151,10 +165,9 @@ def _sparkline(series: list[dict], *, width=520, height=60) -> dict:
     drawable_height = Decimal(height) - (pad * 2)
     coords: list[tuple[float, float]] = []
     if span == 0:
-        render_count = max(n, 6)
-        for i in range(render_count):
-            x = (i / (render_count - 1)) * width
-            y = (height / 2) + (sin((i / (render_count - 1)) * tau) * 3.5)
+        for i in range(n):
+            x = (i / (n - 1)) * width
+            y = height / 2
             coords.append((float(x), float(y)))
     else:
         for i, v in enumerate(values):
@@ -184,8 +197,24 @@ def _sparkline(series: list[dict], *, width=520, height=60) -> dict:
         f"{path[2:]} "
         f"L {coords[-1][0]:.1f},{baseline:.1f} Z"
     )
+    mid = (lo + hi) / Decimal(2)
+    point_meta = []
+    for source, value, (x, y) in zip(points, values, coords):
+        point_meta.append({
+            "x": f"{x:.1f}",
+            "y": f"{y:.1f}",
+            "x_pct": f"{(x / width) * 100:.2f}",
+            "y_pct": f"{(y / height) * 100:.2f}",
+            "equity_label": _money_label(value),
+            "time_label": _spark_time_label(source.get("collected_at"), tz),
+        })
     return {"path": path, "area_path": area_path, "width": width, "height": height, "empty": False,
-            "first": str(values[0]), "last": str(values[-1])}
+            "first": str(values[0]), "last": str(values[-1]),
+            "first_label": _money_label(values[0]), "last_label": _money_label(values[-1]),
+            "min_label": _money_label(lo), "mid_label": _money_label(mid), "max_label": _money_label(hi),
+            "start_label": _spark_time_label(points[0].get("collected_at"), tz),
+            "end_label": _spark_time_label(points[-1].get("collected_at"), tz),
+            "points": point_meta}
 
 
 async def _base_context(conn, config, request: Request, active: str) -> dict:
@@ -252,7 +281,7 @@ async def _overview(conn, config, request):
     from ..jobs.portfolio_view import get_active_portfolio_id
     pid = await get_active_portfolio_id(conn)
     series = await q.equity_sparkline(conn, pid)
-    data["sparkline"] = _sparkline(series)
+    data["sparkline"] = _sparkline(series, tz=config.report_tz)
     top_wallets = (await queries.wallets(
         conn, {"status": "track", "sort": "paper_pnl", "limit": "10"}
     ))["items"]
@@ -297,7 +326,7 @@ async def _journal(conn, config, request):
 async def _performance(conn, config, request):
     window = dict(request.query_params).get("window")
     data = await queries.performance(conn, window)
-    data["sparkline"] = _sparkline(data["equity_series"])
+    data["sparkline"] = _sparkline(data["equity_series"], tz=config.report_tz)
     return {"p": data}
 
 
