@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-SERVER = Path(__file__).resolve().parents[2] / "bootstrap_files" / "mcp" / "polymarket_server.py"
+SERVER = Path(__file__).resolve().parents[1] / "bootstrap_files" / "mcp" / "polymarket_server.py"
 
 EXPECTED_TOOLS = {
     "poly_overview", "poly_wallets", "poly_wallet", "poly_signals", "poly_signal",

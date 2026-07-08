@@ -47,6 +47,9 @@ MAX_ENV_PATHS = (MAX_PROFILE_HOME / ".env", MAX_PROFILE_HOME / "hermes.env")
 POLYMARKET_PROFILE_HOME = Path(HERMES_HOME) / "profiles" / "polymarket"
 POLYMARKET_ENV_PATHS = (POLYMARKET_PROFILE_HOME / ".env", POLYMARKET_PROFILE_HOME / "hermes.env")
 POLY_WORKER_URL = os.environ.get("POLY_WORKER_URL", "http://127.0.0.1:8700").rstrip("/")
+# Bearer token for a REMOTE poly worker (standalone Railway service). Unset when
+# the worker is loopback in this container (proxy targets 127.0.0.1, no auth).
+POLY_API_TOKEN = os.environ.get("POLY_API_TOKEN", "").strip()
 MARCO_17TRACK_BRIDGE_URL = os.environ.get("MARCO_17TRACK_BRIDGE_URL", "http://127.0.0.1:8654").rstrip("/")
 
 # Registry of known Hermes env vars exposed in the UI.
@@ -449,11 +452,6 @@ max_gateway = ManagedProcess(
     env_overrides={"HERMES_S6_SUPERVISED_CHILD": "1"},
     env_paths=MAX_ENV_PATHS,
 )
-poly_worker = ManagedProcess(
-    "poly worker",
-    ["python", "-m", "polymarket.worker"],
-    cwd="/app",
-)
 polymarket_gateway = ManagedProcess(
     "polymarket gateway",
     ["hermes", "-p", "polymarket", "gateway", "run", "--replace"],
@@ -461,7 +459,7 @@ polymarket_gateway = ManagedProcess(
     env_paths=POLYMARKET_ENV_PATHS,
 )
 
-# Shared client for the polymarket worker proxy (loopback, sane timeout).
+# Shared client for the Poly worker proxy (remote service at POLY_WORKER_URL).
 poly_http = httpx.AsyncClient(timeout=30.0)
 POLY_PROXY_RETRY_DELAYS = (0.15, 0.35, 0.75, 1.25)
 
@@ -479,6 +477,9 @@ async def poly_proxy(request: Request):
     headers = {}
     if "content-type" in request.headers:
         headers["content-type"] = request.headers["content-type"]
+    # Authenticate to a remote worker; loopback worker ignores it (no auth mounted).
+    if POLY_API_TOKEN:
+        headers["Authorization"] = f"Bearer {POLY_API_TOKEN}"
     for attempt in range(len(POLY_PROXY_RETRY_DELAYS) + 1):
         try:
             upstream = await poly_http.request(
@@ -492,7 +493,7 @@ async def poly_proxy(request: Request):
                     {
                         "error": "polymarket worker unavailable",
                         "detail": detail,
-                        "worker_state": poly_worker.state,
+                        "worker_url": POLY_WORKER_URL,
                     },
                     status_code=502,
                 )
@@ -544,7 +545,6 @@ async def health(request: Request):
         "marco_gateway": marco_gateway.state,
         "track_bridge": track_bridge.state,
         "max_gateway": max_gateway.state,
-        "poly_worker": poly_worker.state,
         "polymarket_gateway": polymarket_gateway.state,
     })
 
@@ -803,7 +803,8 @@ async def auto_start_gateway():
 
 routes = [
     Route("/17track/{token:path}", public_17track_proxy, methods=["POST"]),
-    # Polymarket research: proxy to the loopback worker (auth enforced in handler).
+    # Polymarket research: proxy to the standalone Poly worker service
+    # (POLY_WORKER_URL). Basic-auth enforced here; bearer token added downstream.
     Route("/polymarket", poly_proxy, methods=["GET", "POST"]),
     Route("/polymarket/{path:path}", poly_proxy, methods=["GET", "POST"]),
     Route("/api/polymarket/{path:path}", poly_proxy, methods=["GET", "POST"]),
@@ -832,13 +833,10 @@ async def lifespan(app):
         asyncio.create_task(track_bridge.start())
     if (MAX_PROFILE_HOME / "config.yaml").exists():
         asyncio.create_task(max_gateway.start())
-    if os.environ.get("POLYMARKET_ENABLED", "1") != "0":
-        asyncio.create_task(poly_worker.start())
     if (POLYMARKET_PROFILE_HOME / "config.yaml").exists():
         asyncio.create_task(polymarket_gateway.start())
     yield
     await polymarket_gateway.stop()
-    await poly_worker.stop()
     await max_gateway.stop()
     await track_bridge.stop()
     await marco_gateway.stop()

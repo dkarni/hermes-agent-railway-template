@@ -35,6 +35,9 @@ for _env_path in (_PROFILE_ROOT / ".env", _PROFILE_ROOT / "hermes.env"):
 # === End auto-load env ===
 
 API_URL = os.environ.get("POLY_API_URL", "http://127.0.0.1:8700").rstrip("/")
+# Bearer token for a remote worker (standalone Railway service). Unset when the
+# worker is loopback in the same container (server.py proxy is the auth boundary).
+API_TOKEN = os.environ.get("POLY_API_TOKEN", "").strip()
 
 # Allowlisted operator action names (PRD sec 19.2). No other action is callable.
 ACTION_NAMES = {
@@ -45,7 +48,11 @@ ACTION_NAMES = {
 
 mcp = FastMCP("polymarket")
 
-client = httpx.Client(base_url=API_URL, headers={"Accept": "application/json"}, timeout=30.0)
+_HEADERS = {"Accept": "application/json"}
+if API_TOKEN:
+    _HEADERS["Authorization"] = f"Bearer {API_TOKEN}"
+
+client = httpx.Client(base_url=API_URL, headers=_HEADERS, timeout=30.0)
 
 
 def _get(path: str, params: dict[str, Any] | None = None) -> dict:
