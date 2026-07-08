@@ -170,6 +170,7 @@
       padding:0.75rem;
     }
     .help {
+      position:relative;
       display:inline-flex;
       align-items:center;
       justify-content:center;
@@ -183,6 +184,64 @@
       font-size:0.66rem;
       font-weight:800;
       vertical-align:middle;
+      cursor:help;
+      overflow:visible;
+      z-index:5;
+    }
+    .help:focus { outline:none; box-shadow:0 0 0 3px rgba(99,230,255,0.12); }
+    .help::after {
+      content:attr(data-tip);
+      position:absolute;
+      left:50%;
+      bottom:calc(100% + 0.55rem);
+      transform:translateX(-50%) translateY(0.25rem);
+      width:max-content;
+      max-width:min(18rem, calc(100vw - 2rem));
+      white-space:normal;
+      text-align:left;
+      pointer-events:none;
+      opacity:0;
+      visibility:hidden;
+      padding:0.55rem 0.65rem;
+      border-radius:0.45rem;
+      color:#eef7ff;
+      background:rgba(13,17,24,0.98);
+      border:1px solid var(--border);
+      box-shadow:0 18px 44px rgba(0,0,0,0.32);
+      font-size:0.75rem;
+      font-weight:500;
+      line-height:1.35;
+      z-index:40;
+      transition:opacity .12s ease, transform .12s ease, visibility .12s ease;
+    }
+    .help::before {
+      content:"";
+      position:absolute;
+      left:50%;
+      bottom:calc(100% + 0.25rem);
+      transform:translateX(-50%) translateY(0.25rem) rotate(45deg);
+      width:0.55rem;
+      height:0.55rem;
+      pointer-events:none;
+      opacity:0;
+      visibility:hidden;
+      background:rgba(13,17,24,0.98);
+      border-right:1px solid var(--border);
+      border-bottom:1px solid var(--border);
+      z-index:39;
+      transition:opacity .12s ease, transform .12s ease, visibility .12s ease;
+    }
+    .help:hover::after,
+    .help:focus::after,
+    .help:hover::before,
+    .help:focus::before {
+      opacity:1;
+      visibility:visible;
+      transform:translateX(-50%) translateY(0);
+    }
+    .help:hover::before,
+    .help:focus::before {
+      transform:translateX(-50%) translateY(0) rotate(45deg);
     }
     .table-note { color:var(--muted); font-size:0.78rem; }
     .empty-note { color:var(--faint); font-size:0.85rem; }

@@ -33,7 +33,7 @@
 {% endmacro %}
 
 {% macro help(text) %}
-  <span class="help" title="{{ text }}" aria-label="{{ text }}">?</span>
+  <span class="help" tabindex="0" role="note" data-tip="{{ text }}" aria-label="{{ text }}">?</span>
 {% endmacro %}
 
 {% macro components(scores) %}
