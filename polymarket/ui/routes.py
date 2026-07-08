@@ -137,7 +137,7 @@ _env.filters["calendar_time"] = _calendar_time
 _env.filters["money_amount"] = _money_amount
 
 
-def _spark_time_label(value, tz: ZoneInfo | str | None) -> str:
+def _chart_time_label(value, tz: ZoneInfo | str | None) -> str:
     dt = _parse_time(value)
     if dt is None:
         return "snapshot"
@@ -152,69 +152,22 @@ def _money_label(value: Decimal) -> str:
     return f"${value:,.2f}"
 
 
-def _sparkline(series: list[dict], *, width=520, height=60, tz: ZoneInfo | str | None = None) -> dict:
-    """Build inline-SVG sparkline geometry from an equity series (no chart lib)."""
+def _equity_chart(series: list[dict], *, tz: ZoneInfo | str | None = None) -> dict:
+    """Build Chart.js-ready equity labels and values."""
     points = [s for s in series if s.get("equity_usd") is not None]
     if len(points) < 2:
-        return {"path": "", "width": width, "height": height, "empty": True}
+        return {"empty": True, "labels": [], "values": []}
     values = [Decimal(p["equity_usd"]) for p in points]
     lo, hi = min(values), max(values)
-    span = hi - lo
-    n = len(values)
-    pad = Decimal(8)
-    drawable_height = Decimal(height) - (pad * 2)
-    coords: list[tuple[float, float]] = []
-    if span == 0:
-        for i in range(n):
-            x = (i / (n - 1)) * width
-            y = height / 2
-            coords.append((float(x), float(y)))
-    else:
-        for i, v in enumerate(values):
-            x = (Decimal(i) / Decimal(n - 1)) * Decimal(width)
-            y = pad + (Decimal(1) - ((v - lo) / span)) * drawable_height
-            coords.append((float(x), float(y)))
-
-    def pt(i: int) -> tuple[float, float]:
-        return coords[min(max(i, 0), len(coords) - 1)]
-
-    path = f"M {coords[0][0]:.1f},{coords[0][1]:.1f}"
-    for i in range(len(coords) - 1):
-        x0, y0 = pt(i - 1)
-        x1, y1 = pt(i)
-        x2, y2 = pt(i + 1)
-        x3, y3 = pt(i + 2)
-        c1x = x1 + (x2 - x0) / 6
-        c1y = y1 + (y2 - y0) / 6
-        c2x = x2 - (x3 - x1) / 6
-        c2y = y2 - (y3 - y1) / 6
-        path += f" C {c1x:.1f},{c1y:.1f} {c2x:.1f},{c2y:.1f} {x2:.1f},{y2:.1f}"
-
-    baseline = height - 1
-    area_path = (
-        f"M {coords[0][0]:.1f},{baseline:.1f} "
-        f"L {coords[0][0]:.1f},{coords[0][1]:.1f} "
-        f"{path[2:]} "
-        f"L {coords[-1][0]:.1f},{baseline:.1f} Z"
-    )
     mid = (lo + hi) / Decimal(2)
-    point_meta = []
-    for source, value, (x, y) in zip(points, values, coords):
-        point_meta.append({
-            "x": f"{x:.1f}",
-            "y": f"{y:.1f}",
-            "x_pct": f"{(x / width) * 100:.2f}",
-            "y_pct": f"{(y / height) * 100:.2f}",
-            "equity_label": _money_label(value),
-            "time_label": _spark_time_label(source.get("collected_at"), tz),
-        })
-    return {"path": path, "area_path": area_path, "width": width, "height": height, "empty": False,
+    return {"empty": False,
+            "labels": [_chart_time_label(p.get("collected_at"), tz) for p in points],
+            "values": [float(v) for v in values],
             "first": str(values[0]), "last": str(values[-1]),
             "first_label": _money_label(values[0]), "last_label": _money_label(values[-1]),
             "min_label": _money_label(lo), "mid_label": _money_label(mid), "max_label": _money_label(hi),
-            "start_label": _spark_time_label(points[0].get("collected_at"), tz),
-            "end_label": _spark_time_label(points[-1].get("collected_at"), tz),
-            "points": point_meta}
+            "start_label": _chart_time_label(points[0].get("collected_at"), tz),
+            "end_label": _chart_time_label(points[-1].get("collected_at"), tz)}
 
 
 async def _base_context(conn, config, request: Request, active: str) -> dict:
@@ -281,7 +234,7 @@ async def _overview(conn, config, request):
     from ..jobs.portfolio_view import get_active_portfolio_id
     pid = await get_active_portfolio_id(conn)
     series = await q.equity_sparkline(conn, pid)
-    data["sparkline"] = _sparkline(series, tz=config.report_tz)
+    data["equity_chart"] = _equity_chart(series, tz=config.report_tz)
     top_wallets = (await queries.wallets(
         conn, {"status": "track", "sort": "paper_pnl", "limit": "10"}
     ))["items"]
@@ -326,7 +279,7 @@ async def _journal(conn, config, request):
 async def _performance(conn, config, request):
     window = dict(request.query_params).get("window")
     data = await queries.performance(conn, window)
-    data["sparkline"] = _sparkline(data["equity_series"], tz=config.report_tz)
+    data["equity_chart"] = _equity_chart(data["equity_series"], tz=config.report_tz)
     return {"p": data}
 
 
