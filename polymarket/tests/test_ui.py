@@ -58,6 +58,34 @@ async def test_active_rule_version_in_header(tmp_path):
         await conn.close()
 
 
+async def test_equity_charts_use_chartjs_canvas(tmp_path):
+    conn, app = await _client_conn(tmp_path)
+    try:
+        cur = await conn.execute("SELECT id FROM paper_portfolios LIMIT 1")
+        pid = (await cur.fetchone())[0]
+        await conn.execute(
+            "INSERT INTO pnl_snapshots (paper_portfolio_id,cash_balance,open_cost,unrealized_pnl,"
+            "realized_pnl,equity,drawdown,collected_at) VALUES "
+            "(?,990000000,0,0,4000000,1004000000,0,'2026-07-07T00:00:00.000000Z')",
+            (pid,),
+        )
+        await conn.commit()
+        with TestClient(app) as client:
+            overview = client.get("/polymarket")
+            performance = client.get("/polymarket/performance")
+
+        assert "chart.js@4.4.3" in overview.text
+        assert 'id="overview-equity-chart"' in overview.text
+        assert 'id="performance-equity-chart"' in performance.text
+        assert "data-hermes-chart" in overview.text
+        assert "data-hermes-chart" in performance.text
+        assert "overviewEquityFill" not in overview.text
+        assert "performanceEquityFill" not in performance.text
+        assert "chart-hit" not in overview.text
+    finally:
+        await conn.close()
+
+
 async def test_wallet_not_found_404(tmp_path):
     conn, app = await _client_conn(tmp_path)
     try:
