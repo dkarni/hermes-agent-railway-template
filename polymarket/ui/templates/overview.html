@@ -5,9 +5,23 @@
 <div x-data="{}" x-init="setInterval(async () => {
       const moneyText = (v) => (v === null || v === undefined || v === '') ? '-' :
         new Intl.NumberFormat('en-US', { style:'currency', currency:'USD' }).format(Number(v));
+      const pctText = (v) => `${Number(v || 0).toFixed(1)}%`;
+      const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+      const setWidth = (id, value) => { const el = document.getElementById(id); if (el) el.style.width = `${Math.max(0, Math.min(100, value || 0))}%`; };
       try { const r = await fetch('/api/polymarket/overview'); if(r.ok){ const d = await r.json();
-        document.getElementById('ov-equity').textContent = moneyText(d.equity_usd);
-        document.getElementById('ov-today').textContent = moneyText(d.today_pnl_usd); } }
+        const total = Number(d.equity_usd || d.cash_usd || 0);
+        const cash = Number(d.cash_usd || 0);
+        const openValue = Math.max(total - cash, 0);
+        const cashPct = total > 0 ? (cash / total) * 100 : 0;
+        const openPct = total > 0 ? (openValue / total) * 100 : 0;
+        setText('ov-equity', moneyText(total));
+        setText('ov-cash-value', moneyText(cash));
+        setText('ov-open-value', moneyText(openValue));
+        setText('ov-cash-pct', pctText(cashPct));
+        setText('ov-open-pct', pctText(openPct));
+        setWidth('ov-cash-bar', cashPct);
+        setWidth('ov-open-bar', openPct);
+        setText('ov-today', moneyText(d.today_pnl_usd)); } }
       catch(e){}
     }, 60000)">
 
@@ -77,15 +91,48 @@
     </div>
   </div>
 
-  <div class="grid sm:grid-cols-2 gap-3 mb-5">
-    <div class="metric-card p-4">
-      <div class="text-xs muted">Paper equity {{ help('Total simulated account value: cash plus the current value of open paper positions.') }}</div>
-      <div id="ov-equity" class="text-xl font-semibold mono mt-1">{{ o.equity_usd | money_amount if o.equity_usd else '-' }}</div>
-    </div>
-    <div class="metric-card p-4">
-      <div class="text-xs muted">Cash {{ help('Unused simulated cash available for future paper copies. Cash drops when a paper position opens.') }}</div>
-      <div class="text-xl font-semibold mono mt-1">{{ o.cash_usd | money_amount if o.cash_usd else '-' }}</div>
-    </div>
+  <div class="card p-5 mb-5">
+    {% if o.portfolio_split.empty %}
+      <div class="empty-note">Portfolio value is not available yet.</div>
+    {% else %}
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div class="text-xs uppercase font-semibold tracking-normal" style="color:var(--muted);">Total portfolio value {{ help('Cash plus the current marked value of open paper positions. This is the paper account value, not realized profit.') }}</div>
+          <div id="ov-equity" class="text-3xl font-semibold mono mt-2">{{ o.portfolio_split.total_label }}</div>
+          <div class="text-xs mt-1" style="color:var(--faint);">Cash + current value of {{ o.open_positions }} open paper position{{ '' if o.open_positions == 1 else 's' }}.</div>
+        </div>
+        <a href="/polymarket/paper-trades?status=open" class="badge">{{ o.open_positions }} open</a>
+      </div>
+
+      <div class="portfolio-bar mt-5" aria-label="Portfolio split between cash and open positions">
+        <div id="ov-cash-bar" class="portfolio-bar-cash" style="width:{{ o.portfolio_split.cash_pct }}%"></div>
+        <div id="ov-open-bar" class="portfolio-bar-open" style="width:{{ o.portfolio_split.open_pct }}%"></div>
+      </div>
+      <div class="grid md:grid-cols-2 gap-3 mt-4">
+        <div class="portfolio-split-row">
+          <span class="portfolio-dot portfolio-dot-cash"></span>
+          <div>
+            <div class="text-sm font-semibold">Cash available</div>
+            <div class="text-xs" style="color:var(--faint);">Uninvested paper cash for future copies.</div>
+          </div>
+          <div class="ml-auto text-right">
+            <div id="ov-cash-value" class="mono text-sm font-semibold">{{ o.portfolio_split.cash_label }}</div>
+            <div id="ov-cash-pct" class="text-xs" style="color:var(--faint);">{{ o.portfolio_split.cash_pct_label }}</div>
+          </div>
+        </div>
+        <div class="portfolio-split-row">
+          <span class="portfolio-dot portfolio-dot-open"></span>
+          <div>
+            <div class="text-sm font-semibold">Open positions value</div>
+            <div class="text-xs" style="color:var(--faint);">Current marked value of open paper positions.</div>
+          </div>
+          <div class="ml-auto text-right">
+            <div id="ov-open-value" class="mono text-sm font-semibold">{{ o.portfolio_split.open_value_label }}</div>
+            <div id="ov-open-pct" class="text-xs" style="color:var(--faint);">{{ o.portfolio_split.open_pct_label }}</div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
   </div>
 
   <div class="grid md:grid-cols-3 gap-4">

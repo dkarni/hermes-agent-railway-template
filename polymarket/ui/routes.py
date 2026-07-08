@@ -152,6 +152,49 @@ def _money_label(value: Decimal) -> str:
     return f"${value:,.2f}"
 
 
+def _decimal_value(value) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _pct_label(value: Decimal) -> str:
+    return f"{value.quantize(Decimal('0.1'))}%"
+
+
+def _portfolio_split(data: dict) -> dict:
+    total = _decimal_value(data.get("equity_usd"))
+    cash = _decimal_value(data.get("cash_usd"))
+    if total is None and cash is None:
+        return {"empty": True}
+    if total is None:
+        total = cash or Decimal(0)
+    if cash is None:
+        cash = Decimal(0)
+    open_value = total - cash
+    if open_value < 0:
+        open_value = Decimal(0)
+    if total > 0:
+        cash_pct = max(Decimal(0), min(Decimal(100), (cash / total) * Decimal(100)))
+        open_pct = max(Decimal(0), min(Decimal(100), (open_value / total) * Decimal(100)))
+    else:
+        cash_pct = Decimal(0)
+        open_pct = Decimal(0)
+    return {
+        "empty": False,
+        "total_label": _money_label(total),
+        "cash_label": _money_label(cash),
+        "open_value_label": _money_label(open_value),
+        "cash_pct": f"{cash_pct:.2f}",
+        "open_pct": f"{open_pct:.2f}",
+        "cash_pct_label": _pct_label(cash_pct),
+        "open_pct_label": _pct_label(open_pct),
+    }
+
+
 def _equity_chart(series: list[dict], *, tz: ZoneInfo | str | None = None) -> dict:
     """Build Chart.js-ready equity labels and values."""
     points = [s for s in series if s.get("equity_usd") is not None]
@@ -235,6 +278,7 @@ async def _overview(conn, config, request):
     pid = await get_active_portfolio_id(conn)
     series = await q.equity_sparkline(conn, pid)
     data["equity_chart"] = _equity_chart(series, tz=config.report_tz)
+    data["portfolio_split"] = _portfolio_split(data)
     top_wallets = (await queries.wallets(
         conn, {"status": "track", "sort": "paper_pnl", "limit": "10"}
     ))["items"]
