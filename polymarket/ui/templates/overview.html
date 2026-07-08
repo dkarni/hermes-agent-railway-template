@@ -21,14 +21,21 @@
   </div>
 
   <div class="grid lg:grid-cols-3 gap-4 mb-4">
+    {% set has_hermes_closed_trades = (o.comparison.filtered.sample | int) > 0 %}
     <div class="card p-6 lg:col-span-2">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
+          {% if has_hermes_closed_trades %}
           <div class="text-xs uppercase font-semibold tracking-normal" style="color:var(--muted);">Paper edge {{ help('Paper edge compares Hermes filtered paper trades with a simple blind-copy baseline. Positive means Hermes is ahead of the baseline.') }}</div>
           <div class="text-4xl font-semibold mono mt-3">{{ o.comparison.filtered_minus_blind_pnl_usd | money_amount }}</div>
-          <div class="text-sm mt-2" style="color:var(--muted);">Hermes paper result minus blind-copy baseline.</div>
+          <div class="text-sm mt-2" style="color:var(--muted);">Hermes closed paper PnL minus the blind-copy baseline.</div>
+          {% else %}
+          <div class="text-xs uppercase font-semibold tracking-normal" style="color:var(--muted);">Benchmark status {{ help('The blind-copy baseline is running, but Hermes has no closed filtered paper trades yet. The difference is not Hermes profit.') }}</div>
+          <div class="text-3xl font-semibold mt-3">No Hermes result yet</div>
+          <div class="text-sm mt-2" style="color:var(--muted);">Hermes closed PnL is $0.00. The blind-copy baseline is {{ o.comparison.blind.net_pnl_usd | money_amount }}, so the apparent {{ o.comparison.filtered_minus_blind_pnl_usd | money_amount }} gap only means blind copy lost money.</div>
+          {% endif %}
         </div>
-        <div class="badge">{{ 'Enough evidence' if o.comparison.sufficient_sample else 'Still collecting evidence' }}</div>
+        <div class="badge">{{ 'Enough evidence' if o.comparison.sufficient_sample else ('Waiting for Hermes trades' if not has_hermes_closed_trades else 'Still collecting evidence') }}</div>
       </div>
 
       <div class="grid sm:grid-cols-2 gap-3 mt-5">
@@ -44,7 +51,11 @@
         </div>
       </div>
 
-      {% if not o.comparison.sufficient_sample %}
+      {% if not has_hermes_closed_trades %}
+      <div class="text-xs mt-4" style="color:#b7f4ff;">
+        Actual Hermes closed paper PnL is {{ o.comparison.filtered.net_pnl_usd | money_amount }}. Do not treat the baseline gap as profit.
+      </div>
+      {% elif not o.comparison.sufficient_sample %}
       <div class="text-xs mt-4" style="color:#b7f4ff;">
         Need at least {{ o.comparison.min_sample }} closed trades in each group before this comparison is reliable.
       </div>

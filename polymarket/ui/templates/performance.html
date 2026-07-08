@@ -33,14 +33,19 @@
 </div>
 
 <div class="card p-4 mb-5">
+  {% set has_hermes_closed_trades = (p.filtered.sample | int) > 0 %}
   <div class="text-sm font-semibold mb-2">Hermes strategy vs blind copy</div>
   <table>
     <tr><th></th><th>Closed trades</th><th>Net PnL</th><th>ROI</th><th>Win rate</th><th>Avg PnL</th><th>Profit factor</th><th>Max drop</th></tr>
     <tr><td>Hermes filtered</td><td>{{ p.filtered.sample }}</td><td>{{ money(p.filtered.net_pnl_usd) }}</td><td>{{ p.filtered.roi }}</td><td>{{ p.filtered.win_rate }}</td><td>{{ money(p.filtered.avg_pnl_usd) }}</td><td>{{ p.filtered.profit_factor or '—' }}</td><td>{{ money(p.filtered.max_drawdown_usd) }}</td></tr>
     <tr><td>Blind copy</td><td>{{ p.blind.sample }}</td><td>{{ money(p.blind.net_pnl_usd,'blind') }}</td><td>{{ p.blind.roi }}</td><td>{{ p.blind.win_rate }}</td><td>{{ money(p.blind.avg_pnl_usd,'blind') }}</td><td>{{ p.blind.profit_factor or '—' }}</td><td>{{ money(p.blind.max_drawdown_usd,'blind') }}</td></tr>
   </table>
+  {% if has_hermes_closed_trades %}
   <div class="text-sm mt-2">Paper edge: {{ money(p.comparison.filtered_minus_blind_pnl_usd) }} · <b>{{ 'enough evidence' if p.comparison.sufficient_sample else 'still collecting evidence' }}</b></div>
-  {% if not p.comparison.sufficient_sample %}
+  {% else %}
+  <div class="text-sm mt-2">No Hermes result yet. The blind-copy baseline is {{ money(p.blind.net_pnl_usd,'blind') }}, but Hermes has 0 closed filtered trades.</div>
+  {% endif %}
+  {% if has_hermes_closed_trades and not p.comparison.sufficient_sample %}
   <div class="text-xs mt-2 flex items-start gap-2" style="color:#b7f4ff;">
     <svg class="icon mt-0.5" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 4.3 2.9 17a2 2 0 0 0 1.7 3h14.8a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z"/></svg>
     <span>Need at least {{ p.comparison.min_sample }} closed trades in each group before this comparison is reliable.</span>
