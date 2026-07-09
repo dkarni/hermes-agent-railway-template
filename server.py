@@ -46,10 +46,9 @@ MAX_PROFILE_HOME = Path(HERMES_HOME) / "profiles" / "max"
 MAX_ENV_PATHS = (MAX_PROFILE_HOME / ".env", MAX_PROFILE_HOME / "hermes.env")
 POLYMARKET_PROFILE_HOME = Path(HERMES_HOME) / "profiles" / "polymarket"
 POLYMARKET_ENV_PATHS = (POLYMARKET_PROFILE_HOME / ".env", POLYMARKET_PROFILE_HOME / "hermes.env")
-POLY_WORKER_URL = os.environ.get("POLY_WORKER_URL", "http://127.0.0.1:8700").rstrip("/")
-# Bearer token for a REMOTE poly worker (standalone Railway service). Unset when
-# the worker is loopback in this container (proxy targets 127.0.0.1, no auth).
-POLY_API_TOKEN = os.environ.get("POLY_API_TOKEN", "").strip()
+# The Polymarket research worker + dashboard is a SEPARATE service (the Poly
+# Railway app). Hermes reaches it ONLY via the polymarket agent's MCP client
+# (POLY_API_URL/POLY_API_TOKEN in the profile env) — no proxy here.
 MARCO_17TRACK_BRIDGE_URL = os.environ.get("MARCO_17TRACK_BRIDGE_URL", "http://127.0.0.1:8654").rstrip("/")
 
 # Registry of known Hermes env vars exposed in the UI.
@@ -459,52 +458,6 @@ polymarket_gateway = ManagedProcess(
     env_paths=POLYMARKET_ENV_PATHS,
 )
 
-# Shared client for the Poly worker proxy (remote service at POLY_WORKER_URL).
-poly_http = httpx.AsyncClient(timeout=30.0)
-POLY_PROXY_RETRY_DELAYS = (0.15, 0.35, 0.75, 1.25)
-
-
-async def poly_proxy(request: Request):
-    # require_auth FIRST: the worker is loopback-only, this is the auth boundary.
-    auth_err = require_auth(request)
-    if auth_err:
-        return auth_err
-    path = request.url.path
-    url = f"{POLY_WORKER_URL}{path}"
-    if request.url.query:
-        url = f"{url}?{request.url.query}"
-    body = await request.body()
-    headers = {}
-    if "content-type" in request.headers:
-        headers["content-type"] = request.headers["content-type"]
-    # Authenticate to a remote worker; loopback worker ignores it (no auth mounted).
-    if POLY_API_TOKEN:
-        headers["Authorization"] = f"Bearer {POLY_API_TOKEN}"
-    for attempt in range(len(POLY_PROXY_RETRY_DELAYS) + 1):
-        try:
-            upstream = await poly_http.request(
-                request.method, url, content=body, headers=headers,
-            )
-            break
-        except httpx.RequestError as exc:
-            if attempt >= len(POLY_PROXY_RETRY_DELAYS):
-                detail = str(exc) or type(exc).__name__
-                return JSONResponse(
-                    {
-                        "error": "polymarket worker unavailable",
-                        "detail": detail,
-                        "worker_url": POLY_WORKER_URL,
-                    },
-                    status_code=502,
-                )
-            await asyncio.sleep(POLY_PROXY_RETRY_DELAYS[attempt])
-    return Response(
-        upstream.content,
-        status_code=upstream.status_code,
-        media_type=upstream.headers.get("content-type", "application/json"),
-    )
-
-
 async def public_17track_proxy(request: Request):
     token = request.path_params["token"]
     body = await request.body()
@@ -803,11 +756,8 @@ async def auto_start_gateway():
 
 routes = [
     Route("/17track/{token:path}", public_17track_proxy, methods=["POST"]),
-    # Polymarket research: proxy to the standalone Poly worker service
-    # (POLY_WORKER_URL). Basic-auth enforced here; bearer token added downstream.
-    Route("/polymarket", poly_proxy, methods=["GET", "POST"]),
-    Route("/polymarket/{path:path}", poly_proxy, methods=["GET", "POST"]),
-    Route("/api/polymarket/{path:path}", poly_proxy, methods=["GET", "POST"]),
+    # Polymarket research (worker + dashboard) is the separate Poly service; the
+    # polymarket agent reaches it over MCP. No proxy route here.
     Route("/", homepage),
     Route("/health", health),
     Route("/api/config", api_config_get, methods=["GET"]),
