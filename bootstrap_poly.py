@@ -56,6 +56,25 @@ def copy_if_missing(source: Path, dest: Path, mode: int | None = None) -> None:
             pass
 
 
+def copy_always(source: Path, dest: Path, mode: int | None = None) -> None:
+    """Overwrite dest from source when they differ. For CODE that must track the
+    image (e.g. the MCP server), NOT for user-editable files. Without this, a
+    stale copy on the /data volume shadows image updates forever — e.g. an old
+    MCP client that omits the bearer token, yielding 401s against remote Poly.
+    """
+    if not source.exists():
+        return
+    if dest.exists() and dest.read_bytes() == source.read_bytes():
+        return
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(source.read_bytes())
+    if mode is not None:
+        try:
+            os.chmod(dest, mode)
+        except OSError:
+            pass
+
+
 def merge_config(path: Path) -> None:
     """Add mcp_servers.polymarket to the profile config.yaml, preserving all else.
 
@@ -108,7 +127,9 @@ def main() -> None:
     MCP_DIR.mkdir(parents=True, exist_ok=True)
     SKILL_DIR.mkdir(parents=True, exist_ok=True)
 
-    copy_if_missing(BOOTSTRAP_MCP / "polymarket_server.py", MCP_DIR / "polymarket_server.py", 0o755)
+    # The MCP server is code: always refresh it so image updates (e.g. bearer-token
+    # auth for remote Poly) reach the /data volume instead of being shadowed forever.
+    copy_always(BOOTSTRAP_MCP / "polymarket_server.py", MCP_DIR / "polymarket_server.py", 0o755)
     copy_if_missing(BOOTSTRAP_POLY / "SOUL.md", PROFILE / "SOUL.md")
     write_if_missing(SKILL_DIR / "SKILL.md", (BOOTSTRAP_POLY / "SKILL.md").read_text(encoding="utf-8")
                      if (BOOTSTRAP_POLY / "SKILL.md").exists() else "# Polymarket Research Operator\n")
